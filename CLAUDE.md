@@ -113,3 +113,8 @@ See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 
 **Note**: This is a ROCm devcontainer project. For ROCm-specific troubleshooting (GPU access, dependency conflicts, Python version issues), see `template_docs/CLAUDE.md`.
 For now we are using ROCm 7.2  - please make sure to read [notesOnRocm72.md](template_docs/notesOnRocm72.md) to understand some of the best practices when working on AMD Strix Halo and Point computers
+
+## Overall intstructions
+## Bash Conventions
+- Do not append `| tail -N` or `| head -N` to commands unless the output is expected to exceed 500 lines
+
