@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Stardew Vision VLM Output Schema",
+  "description": "Schema for validating VLM-generated JSON output describing loot box contents. See ADR-002 and ADR-007 for rationale.",
+  "type": "object",
+  "required": ["cells"],
+  "properties": {
+    "cells": {
+      "type": "array",
+      "description": "Array of cell objects describing each position in the grid",
+      "items": {
+        "type": "object",
+        "required": ["row", "col", "item", "quantity"],
+        "properties": {
+          "row": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Zero-indexed row position"
+          },
+          "col": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Zero-indexed column position"
+          },
+          "item": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Item name (e.g., 'Copper Bar') or 'empty' for unoccupied cells"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Stack count (0 for empty cells, 1-999 for occupied cells)"
+          },
+          "quality": {
+            "type": ["string", "null"],
+            "enum": ["normal", "silver", "gold", "iridium", null],
+            "description": "Item quality level. 'normal' = no star, 'silver'/'gold'/'iridium' = quality star detected, null = empty cell only. See ADR-007."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

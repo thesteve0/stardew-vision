@@ -1,0 +1,53 @@
+[project]
+name = "stardew-vision"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "tomli>=2.0.0",
+    "tomli-w>=1.0.0",
+    "ruff>=0.4.0",
+]
+
+[tool.uv]
+exclude-dependencies = [
+    "apex",
+    "contourpy",
+    "cxxfilt",
+    "cycler",
+    "filelock",
+    "fonttools",
+    "fsspec",
+    "hypothesis",
+    "iniconfig",
+    "jinja2",
+    "kiwisolver",
+    "markupsafe",
+    "matplotlib",
+    "mpmath",
+    "networkx",
+    "ninja",
+    "numpy",
+    "packaging",
+    "pandas",
+    "pillow",
+    "pip",
+    "pluggy",
+    "pygments",
+    "pyparsing",
+    "pytest",
+    "python-dateutil",
+    "pyyaml",
+    "scipy",
+    "setuptools",
+    "six",
+    "sortedcontainers",
+    "sympy",
+    "torch",
+    "torchaudio",
+    "torchvision",
+    "tqdm",
+    "triton",
+    "typing-extensions",
+    "uv",
+]

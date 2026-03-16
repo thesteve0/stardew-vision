@@ -1,0 +1,16 @@
+# User-specific settings
+workspace.xml
+tasks.xml
+usage.statistics.xml
+dictionaries
+shelf
+
+# AWS/Cloud credentials (do not commit)
+aws.xml
+
+# Datasource local storage
+dataSources/
+dataSources.local.xml
+
+# IDE-specific cache
+caches/
