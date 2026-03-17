@@ -7,6 +7,31 @@ dependencies = [
     "tomli>=2.0.0",
     "tomli-w>=1.0.0",
     "ruff>=0.4.0",
+    # VLM fine-tuning
+    "transformers>=4.46.0",
+    "peft>=0.13.0",
+    "accelerate>=1.0.0",
+    "trl>=0.12.0",
+    "datasets>=3.0.0",
+    "huggingface-hub>=0.25.0",
+    # Experiment tracking
+    "mlflow>=2.17.0",
+    # TTS
+    "soundfile>=0.12.0",
+    # Web app
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    # vLLM client (tool-calling format)
+    "openai>=1.50.0",
+    # Extraction agents — OpenCV + PaddleOCR (see docs/ocr-choice.md)
+    "opencv-python>=4.9.0",
+    "paddlepaddle>=3.0.0",
+    "paddleocr>=3.0.0",
+    # Data / evaluation
+    "rapidfuzz>=3.9.0",
+    "jsonschema>=4.23.0",
+    "evaluate>=0.4.0",
 ]
 
 [tool.uv]

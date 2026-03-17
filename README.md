@@ -16,10 +16,10 @@ If using external data mounted at `/data`, explain how to access it.
 
 ## Methodology
 
-Describe your approach:
-- What models or algorithms are you using?
-- What preprocessing steps are required?
-- What are the key experiments or analyses?
+- **VLM orchestrator**: Qwen2.5-VL-7B-Instruct (FP16, LoRA fine-tuned) classifies the screenshot type and dispatches a tool call to the appropriate extraction agent.
+- **Extraction agents**: OpenCV crops the relevant UI region; PaddleOCR (PP-OCRv5) extracts text — chosen over EasyOCR for faster CPU throughput, SOTA accuracy, and capitalization preservation (see `docs/ocr-choice.md`).
+- **TTS**: MeloTTS synthesizes the extracted fields into a WAV narration.
+- **Web app**: FastAPI receives screenshot uploads and streams back audio.
 
 ## Project Structure
 

@@ -69,8 +69,8 @@ We are using Ruff
 
 See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 
-- **Pipeline**: Agent/tool-calling. Orchestrator VLM (Qwen2.5-VL-7B, GPU) classifies the screen type and dispatches a tool call. CPU extraction agents (OpenCV + EasyOCR) crop the region and extract text. Result goes to MeloTTS → WAV. See [ADR-009](docs/adr/009-agent-tool-calling-architecture.md).
-- **Extraction layer**: OpenCV template matching for UI region location; EasyOCR for text extraction; both CPU-only. See [ADR-010](docs/adr/010-screen-region-extraction.md).
+- **Pipeline**: Agent/tool-calling. Orchestrator VLM (Qwen2.5-VL-7B, GPU) classifies the screen type and dispatches a tool call. CPU extraction agents (OpenCV + PaddleOCR) crop the region and extract text. Result goes to MeloTTS → WAV. See [ADR-009](docs/adr/009-agent-tool-calling-architecture.md).
+- **Extraction layer**: OpenCV template matching for UI region location; PaddleOCR (PP-OCRv5) for text extraction; both CPU-only. Chosen over EasyOCR for faster CPU throughput, SOTA accuracy, and correct capitalization preservation. See [ADR-010](docs/adr/010-screen-region-extraction.md) and [docs/ocr-choice.md](docs/ocr-choice.md).
 - **MVP screen type**: Pierre's General Store detail panel — name, description, price per unit, quantity selected, total cost.
 - **Fine-tuning**: Orchestrator VLM fine-tuned on `(screenshot, tool_call_response)` pairs. LoRA via PEFT for Qwen2.5-VL-7B; TRL SFTTrainer for SmolVLM2-2.2B. Both in FP16. See [ADR-001](docs/adr/001-vlm-selection.md).
 - **Configuration**: YAML files in `configs/training/` for hyperparameters; `configs/output_schema.json` for per-screen-type extraction JSON schemas.
