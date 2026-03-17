@@ -60,6 +60,8 @@ Files:
 
 ### Web App Client Pattern
 
+The orchestrator VLM is called with a `tools` list in OpenAI function-calling format. It returns a `tool_call` response identifying the screen type; the web app then invokes the corresponding extraction agent as a local library call (no second API call).
+
 ```python
 from openai import AsyncOpenAI
 
@@ -67,7 +69,21 @@ client = AsyncOpenAI(
     base_url=settings.vlm_endpoint,   # env var: local or OpenShift URL
     api_key=settings.vlm_api_key,     # "EMPTY" for local vLLM
 )
+
+# Orchestrator call with tool definitions
+response = await client.chat.completions.create(
+    model="stardew-vision-vlm",
+    messages=[{"role": "user", "content": [{"type": "image_url", ...}, {"type": "text", "text": "..."}]}],
+    tools=TOOL_DEFINITIONS,   # crop_pierres_detail_panel, crop_tv_dialog, etc.
+    tool_choice="required",
+)
+
+# Extraction agents are local library functions, not API calls
+tool_name = response.choices[0].message.tool_calls[0].function.name
+result = await invoke_extraction_agent(tool_name, image_path)
 ```
+
+**Note**: Only the orchestrator VLM uses the API. Extraction agents (OpenCV + EasyOCR) are called directly as Python library functions — no second vLLM call, no GPU used for extraction. See ADR-010 for extraction agent details.
 
 ### KubeFlow Pipelines (Post-MVP)
 

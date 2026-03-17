@@ -1,8 +1,10 @@
 # ADR-008: Grid Detection Strategy for Dual-Grid Screenshots
 
 **Date**: 2026-03-05
-**Status**: Accepted
+**Status**: Deferred (2026-03-17)
 **Deciders**: Project team
+
+> **Note**: Full-page grid detection is not needed for the targeted panel extraction approach. Revisit if inventory grid reading becomes a priority screen type.
 
 ## Context
 

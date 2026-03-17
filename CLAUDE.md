@@ -4,7 +4,7 @@ This file provides context to Claude Code when working on this project.
 
 ## Project Overview
 
-**Purpose**: There are two purposes to this project. 1) We are building a site that allows visually impaired, but not blind, Stardew Valley players to upload a picture of the contents of their loot box and we will send back an audio file describing what is in the box for each occupied cell in the box. 2) This repository and application will be used to give conference talks and workshops to AI practitioners on using VLMs and TTS models for practical use cases. 
+**Purpose**: There are two purposes to this project. 1) We are building a site that allows visually impaired, but not blind, Stardew Valley players to upload a screenshot of an in-game UI panel (starting with Pierre's shop) and receive an audio file narrating the panel contents. 2) This repository and application will be used to give conference talks and workshops to AI practitioners on using VLMs, agent/tool-calling patterns, OCR, and TTS for practical accessibility use cases.
 
 **Problem Domain**: ["Fine tuning multi-modal models for user interface  state recognition", "Text to speech for visually impared"]
 
@@ -22,20 +22,23 @@ This file provides context to Claude Code when working on this project.
 - Feature store: Filesystem/JSONL for MVP; Feast Phase 2
 
 **Full project plan**: See [`docs/plan.md`](docs/plan.md) — the authoritative reference for architecture, implementation sequence, and decisions.
-**Architecture decisions**: See [`docs/adr/`](docs/adr/) — ADRs 001-006 document all major choices and their rationale.
+**Architecture decisions**: See [`docs/adr/`](docs/adr/) — ADRs 001-010 document all major choices and their rationale. ADR-009 and ADR-010 are the current architecture.
 
 ## Codebase Structure
 
 ```
-scripts/ # Experiment scripts and configurations
-datasets/ # The datasets being used which are host volumes bound into this devcontainer
-models/ # The core models cached to a host volume bound to the this devcontainer
-configs/ # Configuration files including the helm charts and other files needed for OpenShift Deployments
-docs/ # Documentation files for this project
+scripts/    # Experiment scripts and data collection utilities
+datasets/   # Host volume — screenshots, annotations, OpenCV anchor templates
+models/     # Host volume — base + fine-tuned LoRA checkpoints
+configs/    # Training configs, output schemas, OpenShift serving manifests
+docs/       # ADRs, plan, data-collection-plan, evaluation rubric
 src/
-├── data/           # Data loading, preprocessing, augmentation
-├── models/         # Model architectures and training logic
-├── utils/          # Helper functions, logging, visualization
+└── stardew_vision/
+    ├── tools/       # Extraction agents: crop_pierres_detail_panel, crop_tv_dialog, etc.
+    ├── models/      # VLM orchestrator wrapper, LoRA fine-tuning (Qwen + SmolVLM2)
+    ├── tts/         # MeloTTS synthesize.py
+    ├── serving/     # vLLM OpenAI-client wrapper + tool dispatch logic
+    └── webapp/      # FastAPI app, routes, static HTML
 ```
 
 **Key files**:
@@ -66,13 +69,14 @@ We are using Ruff
 
 See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 
-- **VLM pipeline**: VLM outputs structured JSON (item name + quantity per cell) → Python template → MeloTTS → WAV audio returned to user. Not end-to-end description generation. See [ADR-002](docs/adr/002-vlm-role-architecture.md).
-- **Fine-tuning**: LoRA via PEFT for Qwen2.5-VL-7B; TRL SFTTrainer for SmolVLM2-2.2B. Both in FP16. See [ADR-001](docs/adr/001-vlm-selection.md).
-- **Data loading**: PyTorch Dataset class in `src/stardew_vision/data/dataset.py`; JSONL annotations; data lives in `datasets/` (host volume, not in git).
-- **Configuration**: YAML files in `configs/training/` for hyperparameters; `configs/output_schema.json` for VLM output JSON schema validation.
+- **Pipeline**: Agent/tool-calling. Orchestrator VLM (Qwen2.5-VL-7B, GPU) classifies the screen type and dispatches a tool call. CPU extraction agents (OpenCV + EasyOCR) crop the region and extract text. Result goes to MeloTTS → WAV. See [ADR-009](docs/adr/009-agent-tool-calling-architecture.md).
+- **Extraction layer**: OpenCV template matching for UI region location; EasyOCR for text extraction; both CPU-only. See [ADR-010](docs/adr/010-screen-region-extraction.md).
+- **MVP screen type**: Pierre's General Store detail panel — name, description, price per unit, quantity selected, total cost.
+- **Fine-tuning**: Orchestrator VLM fine-tuned on `(screenshot, tool_call_response)` pairs. LoRA via PEFT for Qwen2.5-VL-7B; TRL SFTTrainer for SmolVLM2-2.2B. Both in FP16. See [ADR-001](docs/adr/001-vlm-selection.md).
+- **Configuration**: YAML files in `configs/training/` for hyperparameters; `configs/output_schema.json` for per-screen-type extraction JSON schemas.
 - **Checkpointing**: LoRA adapters saved to `models/fine-tuned/{run_name}/` (host volume). Naming: `{model_short_name}-{run_type}-v{N}`.
 - **Experiment tracking**: MLFlow; local `mlruns/`; run naming `{model_short_name}-{run_type}-v{N}`.
-- **Serving**: vLLM on port 8001 (OpenAI-compatible API); FastAPI web app on port 8000. Client uses `openai` library — same code works for local and OpenShift AI endpoints.
+- **Serving**: vLLM on port 8001 (OpenAI-compatible API with tool-calling); FastAPI web app on port 8000. Client uses `openai` library — same code works for local and OpenShift AI endpoints. See [ADR-005](docs/adr/005-serving-strategy.md).
 - **Feature store**: Filesystem/JSONL for MVP. Feast in Phase 2 (see [ADR-006](docs/adr/006-feature-store-strategy.md)). Annotation schema is Feast-compatible from day 1 (UUID image_id, timestamps).
 
 ## Important Patterns

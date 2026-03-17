@@ -1,8 +1,10 @@
 # ADR-007: Overlay Detection Strategy for Stack Counts and Quality Indicators
 
 **Date**: 2026-03-05
-**Status**: Accepted
+**Status**: Deferred (2026-03-17)
 **Deciders**: Project team
+
+> **Note**: Grid-cell overlay detection is not relevant to current screen types (Pierre's shop, TV, Inventory panels). Revisit if chest/inventory grid reading is prioritized.
 
 ## Context
 

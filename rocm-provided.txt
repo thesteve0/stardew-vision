@@ -1,4 +1,39 @@
-pip==24.0
-ruff==0.15.4
-tomli==2.4.0
-tomli-w==1.2.0
+apex @ http://compute-artifactory.amd.com/artifactory/compute-pytorch-rocm/compute-rocm-rel-7.2/43/apex-1.9.0+rocm7.2.0.gite37ed124-cp312-cp312-linux_x86_64.whl
+contourpy==1.3.3
+cxxfilt==0.3.0
+cycler==0.12.1
+filelock==3.20.3
+fonttools==4.61.1
+fsspec==2026.1.0
+hypothesis==6.150.2
+iniconfig==2.3.0
+jinja2==3.1.6
+kiwisolver==1.4.9
+markupsafe==3.0.3
+matplotlib==3.10.8
+mpmath==1.3.0
+networkx==3.6.1
+ninja==1.13.0
+numpy==2.4.1
+packaging==26.0
+pandas==3.0.0
+pillow==12.1.0
+pip==25.3
+pluggy==1.6.0
+pygments==2.19.2
+pyparsing==3.3.2
+pytest==9.0.2
+python-dateutil==2.9.0.post0
+pyyaml==6.0.3
+scipy==1.17.0
+setuptools==80.10.1
+six==1.17.0
+sortedcontainers==2.4.0
+sympy==1.14.0
+torch @ http://compute-artifactory.amd.com/artifactory/compute-pytorch-rocm/compute-rocm-rel-7.2/43/torch-2.9.1+rocm7.2.0.lw.git7e1940d4-cp312-cp312-linux_x86_64.whl
+torchaudio @ http://compute-artifactory.amd.com/artifactory/compute-pytorch-rocm/compute-rocm-rel-7.2/43/torchaudio-2.9.0+rocm7.2.0.gite3c6ee2b-cp312-cp312-linux_x86_64.whl
+torchvision @ http://compute-artifactory.amd.com/artifactory/compute-pytorch-rocm/compute-rocm-rel-7.2/43/torchvision-0.24.0+rocm7.2.0.gitb919bd0c-cp312-cp312-linux_x86_64.whl
+tqdm==4.67.1
+triton @ http://compute-artifactory.amd.com/artifactory/compute-pytorch-rocm/compute-rocm-rel-7.2/43/triton-3.5.1+rocm7.2.0.gita272dfa8-cp312-cp312-linux_x86_64.whl
+typing-extensions==4.15.0
+uv==0.10.8

@@ -1,46 +1,87 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Stardew Vision VLM Output Schema",
-  "description": "Schema for validating VLM-generated JSON output describing loot box contents. See ADR-002 and ADR-007 for rationale.",
-  "type": "object",
-  "required": ["cells"],
-  "properties": {
-    "cells": {
-      "type": "array",
-      "description": "Array of cell objects describing each position in the grid",
-      "items": {
-        "type": "object",
-        "required": ["row", "col", "item", "quantity"],
-        "properties": {
-          "row": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Zero-indexed row position"
+  "title": "Stardew Vision Extraction Output Schemas",
+  "description": "Per-screen-type schemas for validating extraction agent JSON output. See ADR-009 and ADR-010.",
+  "definitions": {
+    "pierre_shop": {
+      "$id": "#pierre_shop",
+      "title": "Pierre's Shop Detail Panel",
+      "description": "Extracted fields from the right-column item detail panel in Pierre's General Store.",
+      "type": "object",
+      "required": ["selected_item"],
+      "properties": {
+        "selected_item": {
+          "type": "object",
+          "required": ["name", "description", "price_per_unit", "quantity_selected", "total_cost"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Item name as displayed in the shop panel (e.g., 'Parsnip Seeds')"
+            },
+            "description": {
+              "type": "string",
+              "description": "Item description text from the shop panel"
+            },
+            "price_per_unit": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Cost per single item in gold"
+            },
+            "quantity_selected": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of items the player has selected to purchase"
+            },
+            "total_cost": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total purchase cost in gold (price_per_unit * quantity_selected)"
+            }
           },
-          "col": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Zero-indexed column position"
-          },
-          "item": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Item name (e.g., 'Copper Bar') or 'empty' for unoccupied cells"
-          },
-          "quantity": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Stack count (0 for empty cells, 1-999 for occupied cells)"
-          },
-          "quality": {
-            "type": ["string", "null"],
-            "enum": ["normal", "silver", "gold", "iridium", null],
-            "description": "Item quality level. 'normal' = no star, 'silver'/'gold'/'iridium' = quality star detected, null = empty cell only. See ADR-007."
-          }
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "tv_dialog": {
+      "$id": "#tv_dialog",
+      "title": "TV Dialog Screen",
+      "description": "Extracted text from the in-game television program dialog box.",
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Full text content displayed on the TV screen"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inventory_tooltip": {
+      "$id": "#inventory_tooltip",
+      "title": "Inventory Item Tooltip",
+      "description": "Extracted fields from the tooltip popup shown when hovering over an inventory item.",
+      "type": "object",
+      "required": ["name", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Item name as displayed in the tooltip"
         },
-        "additionalProperties": false
-      }
+        "description": {
+          "type": "string",
+          "description": "Item description text from the tooltip"
+        },
+        "sell_price": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Sell price in gold, if displayed. Null if not shown (e.g., quest items)."
+        }
+      },
+      "additionalProperties": false
     }
-  },
-  "additionalProperties": false
+  }
 }

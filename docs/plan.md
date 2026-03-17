@@ -1,8 +1,8 @@
 # Stardew Vision: Project Plan
 
-**Last updated**: 2026-03-03
+**Last updated**: 2026-03-17
 **Talk deadline**: 1-2 months
-**Status**: Pre-implementation — documentation complete, coding not yet started
+**Status**: Architecture pivot complete — agent/tool-calling pipeline (see ADR-009)
 
 This is the authoritative project plan. It is referenced from `CLAUDE.md`. Update this document as decisions change; use the ADRs in `docs/adr/` to document *why* each decision was made.
 
@@ -10,10 +10,12 @@ This is the authoritative project plan. It is referenced from `CLAUDE.md`. Updat
 
 ## Project Goals
 
-1. **Accessibility tool**: Visually impaired (but not blind) Stardew Valley players upload a screenshot of their loot box and receive an audio file describing what is in each occupied cell.
-2. **Conference talk artifact**: A live demo and complete codebase used in talks/workshops teaching AI practitioners how to apply VLMs + TTS for accessibility use cases.
+1. **Accessibility tool**: Visually impaired (but not blind) Stardew Valley players encounter UI panels they cannot read clearly. They take a screenshot, upload it, and hear the panel contents read aloud.
+2. **Conference talk artifact**: A live demo and complete codebase used in talks/workshops teaching AI practitioners how to apply VLMs, agent/tool-calling patterns, OCR, and TTS for accessibility use cases.
 
-**Primary user**: A player whose vision impairment makes reading small pixel-art item sprites difficult. They take a screenshot on their iPad, upload it, and hear the contents read aloud.
+**Primary user**: A player whose vision impairment makes reading small game text difficult. They take a screenshot on their iPad or PC, upload it, and hear the panel contents described in audio.
+
+**MVP target**: Pierre's General Store — when a player is looking at an item to purchase, the app reads the item name, description, price per unit, quantity selected, and total cost.
 
 ---
 
@@ -21,23 +23,43 @@ This is the authoritative project plan. It is referenced from `CLAUDE.md`. Updat
 
 ```
 User uploads screenshot (iPad or browser)
-  ↓
-FastAPI POST /analyze (port 8000)
-  ↓
-VLM Inference via vLLM (port 8001, OpenAI-compatible API)
-  Fine-tuned Qwen2.5-VL-7B-Instruct (FP16, ROCm)
-  ↓ JSON output
-  {"cells": [{"row":0,"col":0,"item":"Copper Bar","quantity":5,"quality":"silver"}, ...]}
-  ↓
-Description template (Python string formatting)
-  → "In your treasure chest: top row has Copper Bar ×5, Ancient Sword, empty..."
-  ↓
-MeloTTS synthesis (CPU real-time, GPU-optional)
-  ↓ WAV audio bytes
-FastAPI response (audio/wav)
-  ↓
+  |
+  v
+FastAPI POST /analyze  (port 8000)
+  |
+  v
+Orchestrator VLM  (Qwen2.5-VL-7B-Instruct, FP16, ROCm, vLLM port 8001)
+  Classifies screen type; returns tool_call response
+  |
+  +-- tool_call: crop_pierres_detail_panel  -----> OpenCV crop + EasyOCR  [Phase 1 MVP]
+  |                                                  {"name", "description",
+  |                                                   "price_per_unit",
+  |                                                   "quantity_selected",
+  |                                                   "total_cost"}
+  |
+  +-- tool_call: crop_tv_dialog  ----------------> OpenCV crop + EasyOCR  [Phase 2]
+  |                                                  {"text"}
+  |
+  +-- tool_call: crop_inventory_tooltip  --------> OpenCV crop + EasyOCR  [Phase 3]
+                                                     {"name", "description",
+                                                      "sell_price"}
+  |
+  v
+Narration template (Python string formatting)
+  "You are looking at Parsnip Seeds. Plant these in the spring.
+   It costs 20 gold each. You have selected 5. Total cost: 100 gold."
+  |
+  v
+MeloTTS synthesis  (CPU, WAV output)
+  |
+  v
+FastAPI response  (audio/wav)
+  |
+  v
 Browser <audio> element plays immediately
 ```
+
+**Key architectural property**: The orchestrator VLM uses GPU for vision classification only. Text extraction (OpenCV + EasyOCR) runs on CPU. New screen types are added by writing one extraction function and adding training examples — no architectural changes.
 
 ---
 
@@ -47,16 +69,15 @@ Full rationale in `docs/adr/`. Summary:
 
 | Decision | Choice | ADR |
 |---|---|---|
-| VLM Candidate A | `Qwen/Qwen2.5-VL-7B-Instruct` (FP16, LoRA via PEFT) | [ADR-001](adr/001-vlm-selection.md) |
-| VLM Candidate B | `HuggingFaceTB/SmolVLM2-2.2B-Instruct` (FP16/BF16, TRL SFTTrainer) | [ADR-001](adr/001-vlm-selection.md) |
-| VLM role | Structured JSON output → template → TTS (not end-to-end description) | [ADR-002](adr/002-vlm-role-architecture.md) |
+| VLM Orchestrator | `Qwen/Qwen2.5-VL-7B-Instruct` (FP16, LoRA via PEFT) — screen classifier + tool dispatcher | [ADR-001](adr/001-vlm-selection.md), [ADR-009](adr/009-agent-tool-calling-architecture.md) |
+| VLM Comparison | `HuggingFaceTB/SmolVLM2-2.2B-Instruct` — same orchestrator task, smaller model | [ADR-001](adr/001-vlm-selection.md) |
+| Pipeline architecture | Agent/tool-calling: orchestrator VLM + CPU extraction agents | [ADR-009](adr/009-agent-tool-calling-architecture.md) |
+| Extraction layer | OpenCV template matching + EasyOCR (CPU-only) | [ADR-010](adr/010-screen-region-extraction.md) |
 | TTS | MeloTTS-English (local, CPU/GPU-optional, MIT) | [ADR-003](adr/003-tts-selection.md) |
 | Repo structure | Single monorepo | [ADR-004](adr/004-repo-structure.md) |
-| Serving | vLLM locally (port 8001); KServe on OpenShift AI | [ADR-005](adr/005-serving-strategy.md) |
+| Serving | vLLM locally (port 8001, tool-calling); KServe on OpenShift AI | [ADR-005](adr/005-serving-strategy.md) |
 | Distributed training | Ray Train on OpenShift AI (KubeRay); KFP post-MVP | [ADR-005](adr/005-serving-strategy.md) |
 | Feature store | Filesystem/JSONL for MVP; Feast Phase 2 | [ADR-006](adr/006-feature-store-strategy.md) |
-| Grid detection | VLM-first (no preprocessing); accepts dual-grid screenshots | [ADR-008](adr/008-grid-detection-strategy.md) |
-| Overlay detection | VLM detects quality stars + stack counts | [ADR-007](adr/007-overlay-detection-strategy.md) |
 | Experiment tracking | MLFlow (local dev + OpenShift AI) | Confirmed |
 | Fine-tuning method | LoRA (PEFT), FP16 only — ROCm 7.2 constraint | Confirmed |
 | Web framework | FastAPI + static HTML (no JS framework) | Confirmed |
@@ -82,24 +103,26 @@ stardew-vision/
 ├── .devcontainer/             # ROCm devcontainer config (do not modify casually)
 ├── docs/
 │   ├── adr/                   # Architecture Decision Records
-│   │   ├── 000-adr-template.md
 │   │   ├── 001-vlm-selection.md
-│   │   ├── 002-vlm-role-architecture.md
+│   │   ├── 002-vlm-role-architecture.md  (Superseded by 009)
 │   │   ├── 003-tts-selection.md
 │   │   ├── 004-repo-structure.md
 │   │   ├── 005-serving-strategy.md
 │   │   ├── 006-feature-store-strategy.md
-│   │   ├── 007-overlay-detection-strategy.md
-│   │   └── 008-grid-detection-strategy.md
+│   │   ├── 007-overlay-detection-strategy.md  (Deferred)
+│   │   ├── 008-grid-detection-strategy.md     (Deferred)
+│   │   ├── 009-agent-tool-calling-architecture.md
+│   │   └── 010-screen-region-extraction.md
 │   ├── plan.md                # This file
-│   ├── talk-abstract.md       # Conference talk abstract (user need)
-│   ├── evaluation-rubric.md   # VLM scoring metrics and thresholds
-│   ├── data-collection-plan.md  # Todo lists for synthetic + real data
-│   ├── user-submission-guide.md  # User-facing screenshot submission instructions
+│   ├── talk-abstract.md       # Conference talk abstract
+│   ├── evaluation-rubric.md   # Metrics and thresholds
+│   ├── data-collection-plan.md  # Data strategy (screen-type screenshots)
 │   └── dataset-guide.md       # Annotation schema + contribution guide
 ├── datasets/                  # Host volume mount — NOT committed to git
-│   ├── assets/                # Sprite sheet, item manifest
-│   ├── raw/                   # Images (synthetic + real)
+│   ├── assets/
+│   │   ├── templates/         # OpenCV anchor templates per screen type
+│   │   └── ...
+│   ├── raw/                   # Screenshots (screen-type labeled)
 │   ├── annotated/             # JSONL annotation files
 │   └── splits/                # train/val/test manifests
 ├── models/                    # Host volume mount — NOT committed to git
@@ -107,9 +130,9 @@ stardew-vision/
 │   └── fine-tuned/            # LoRA adapter checkpoints
 ├── configs/
 │   ├── training/
-│   │   ├── finetune_config.yaml         # Qwen2.5-VL-7B LoRA config
+│   │   ├── finetune_config.yaml           # Qwen2.5-VL-7B LoRA config
 │   │   └── finetune_config_smolvlm2.yaml  # SmolVLM2 TRL config
-│   ├── output_schema.json               # JSON schema for VLM output validation
+│   ├── output_schema.json                 # Per-screen-type JSON schemas
 │   └── serving/
 │       ├── vllm_local.yaml
 │       └── openshift/
@@ -122,42 +145,40 @@ stardew-vision/
 │   └── 04_evaluation_results.ipynb
 ├── scripts/
 │   ├── resolve-dependencies.py  # (exists)
-│   ├── generate_synthetic_data.py
+│   ├── collect_screen_screenshots.py  # Guided screenshot collection tool
 │   ├── validate_dataset.py
-│   ├── annotate_dataset.py      # Model-assisted annotation review tool
 │   ├── run_baseline_eval.py
 │   └── push_to_hf.py
 ├── src/
 │   └── stardew_vision/          # Main Python package
-│       ├── data/
-│       │   ├── dataset.py        # PyTorch Dataset class
-│       │   ├── preprocessing.py  # Cell extraction from screenshots
-│       │   └── item_taxonomy.py  # Item name → category mapping
+│       ├── tools/
+│       │   ├── __init__.py          # Tool registry
+│       │   ├── crop_pierres_detail_panel.py  # OpenCV crop + EasyOCR
+│       │   ├── crop_tv_dialog.py             # Phase 2
+│       │   └── crop_inventory_tooltip.py     # Phase 3
 │       ├── models/
-│       │   ├── vlm_wrapper.py    # Unified VLM inference interface (FP16)
-│       │   ├── finetune.py       # LoRA training loop (Qwen)
-│       │   ├── finetune_smolvlm.py  # TRL SFTTrainer (SmolVLM2)
-│       │   └── evaluate.py       # All 8 metrics + JSON schema validation
+│       │   ├── vlm_wrapper.py       # Orchestrator VLM inference (tool-calling)
+│       │   ├── finetune.py          # LoRA training loop (Qwen)
+│       │   └── finetune_smolvlm.py  # TRL SFTTrainer (SmolVLM2)
 │       ├── tts/
-│       │   └── synthesize.py     # text → WAV bytes via MeloTTS
+│       │   └── synthesize.py        # text → WAV bytes via MeloTTS
 │       ├── serving/
-│       │   └── inference.py      # vLLM OpenAI-client wrapper
+│       │   └── inference.py         # vLLM OpenAI-client wrapper + tool dispatch
 │       └── webapp/
-│           ├── app.py            # FastAPI app
-│           ├── routes.py         # POST /analyze → audio/wav
+│           ├── app.py               # FastAPI app
+│           ├── routes.py            # POST /analyze → audio/wav
 │           └── static/
-│               └── index.html    # Upload form + audio player
+│               └── index.html       # Upload form + audio player
 ├── tests/
-│   ├── test_data_pipeline.py
+│   ├── fixtures/                    # Test screenshots for unit tests
+│   ├── test_tools.py                # Extraction agent unit tests
 │   ├── test_vlm_wrapper.py
 │   ├── test_tts.py
 │   └── test_webapp.py
-├── main.py                       # CLI entrypoint
-├── pyproject.toml                # Dependencies (preserve exclude-dependencies)
-└── CLAUDE.md                     # Claude Code context (references this file)
+├── main.py                          # CLI entrypoint
+├── pyproject.toml                   # Dependencies (preserve exclude-dependencies)
+└── CLAUDE.md                        # Claude Code context (references this file)
 ```
-
-**Note**: `src/stardew-vision/` (hyphen) must be renamed to `src/stardew_vision/` (underscore) — Python package names cannot contain hyphens.
 
 ---
 
@@ -165,13 +186,26 @@ stardew-vision/
 
 Full detail in `docs/data-collection-plan.md`.
 
-**Track 1 — Synthetic data** (Week 1): Generate 500 labeled images from the Stardew Valley sprite sheet. Script: `scripts/generate_synthetic_data.py`. Perfect ground truth, zero annotation cost. Unblocks everything.
+**Track 1 — Pierre's shop screenshots** (Phase 1, immediate): Collect screenshots of Pierre's shop with various items selected. Annotate with expected extracted fields (name, description, price, quantity, total). Used to evaluate OCR extraction accuracy and train orchestrator.
 
-**Track 2 — Community screenshots** (Weeks 2-5): Collect 100-200 real screenshots via Reddit/Discord outreach. Annotate using model-assisted review. The final test set must be real screenshots only.
+**Track 2 — Screen-type diversity screenshots** (Phase 1 + 2): Collect screenshots of different screen types (Pierre's shop, TV, inventory tooltip, crafting menu, chest) for orchestrator classifier training. Label: `{ image_id, screen_type }`. Minimum 50 examples per screen type for the orchestrator fine-tuning set.
 
-**Annotation schema**: JSONL per image. Fields include `image_id` (UUID4), `source`, `loot_type`, `grid`, `cells` (item_name, quantity, occupied, category), `created_at`. Schema is Feast-compatible from day 1.
+**Annotation schema**:
+```json
+{
+  "image_id": "uuid4",
+  "screen_type": "pierre_shop",
+  "expected_extraction": {
+    "name": "Parsnip Seeds",
+    "description": "Plant these in the spring. Takes 4 days to mature.",
+    "price_per_unit": 20,
+    "quantity_selected": 5,
+    "total_cost": 100
+  }
+}
+```
 
-**Dataset splits**: 70% train / 15% val / 15% test. Test = real screenshots only.
+**Dataset splits**: 70% train / 15% val / 15% test. Test set = held-out screenshots not used in training.
 
 ---
 
@@ -179,40 +213,26 @@ Full detail in `docs/data-collection-plan.md`.
 
 Full detail in `docs/evaluation-rubric.md`.
 
-### Two-Stage Evaluation
+### Metrics
 
-**Stage 1 — JSON Validity**: Parse VLM output; validate against `configs/output_schema.json` using `jsonschema`. Invalid output = 0 on all cell metrics. Track `JSON Validity Rate` separately.
-
-**Stage 2 — Content Metrics** (using `rapidfuzz` for fuzzy matching):
-
-| Metric | Description | MVP Target (fine-tuned) |
+| Metric | Description | MVP Target |
 |---|---|---|
-| JSON Validity Rate | % calls producing schema-valid JSON | ≥ 95% |
-| Grid Detection Accuracy | % dual-grid screenshots where VLM correctly analyzed only the chest grid (ADR-008) | ≥ 95% |
-| CIA-Exact | % occupied cells with exact item name match (case-insensitive) | ≥ 80% |
-| CIA-Fuzzy | % occupied cells with rapidfuzz ratio ≥ 85 | ≥ 88% |
-| CIA-Category | % occupied cells in the correct item category | ≥ 92% |
-| FNR-Occupied | % occupied cells reported as empty (worst user failure) | ≤ 8% |
-| FPR-Empty | % empty cells reported as occupied (hallucinations) | ≤ 5% |
-| Quantity Accuracy | % correct quantity readings for stacked items | ≥ 75% |
-| Quality Accuracy | % correct quality readings (normal/silver/gold/iridium) | ≥ 70% |
-| Grid Completeness | % runs with correct cell count in output | ≥ 98% |
+| Screen classification accuracy | % of screenshots where correct tool is dispatched | >= 95% (fine-tuned) |
+| Field extraction accuracy | % of extracted fields matching ground truth (exact for int, fuzzy >= 90 for str) | >= 90% |
+| JSON validity rate | % of extraction calls producing schema-valid JSON | >= 99% |
+| End-to-end narration quality | Human spot-check: audio correctly describes panel | Pass/fail spot check |
 
-All metrics logged to MLFlow. Baseline (zero-shot) vs. fine-tuned comparison is the core narrative of the talk.
-
-### Item Difficulty Taxonomy (refined after baseline)
-
-- **Tier 1** (easy): Common, distinctive items — Coal, Wood, Fiber, Stone
-- **Tier 2** (medium): Similar-looking items — different ore types, different weapon sprites
-- **Tier 3** (hard): Rare items the base model may never have seen
+All metrics logged to MLFlow. Baseline (zero-shot orchestrator) vs. fine-tuned comparison is the core talk narrative.
 
 ---
 
 ## Fine-Tuning
 
-### Qwen2.5-VL-7B (LoRA via PEFT)
+### Qwen2.5-VL-7B (LoRA via PEFT) — Orchestrator
 
 Config: `configs/training/finetune_config.yaml`
+
+**Task**: Screen classification + tool dispatch. Training data: `(screenshot_image, tool_call_response)` pairs.
 
 Key settings:
 - `dtype: float16` — FP16 only (ROCm 7.2 constraint)
@@ -221,16 +241,16 @@ Key settings:
 - Effective batch size 16 (batch=2, grad_accum=8)
 - Apply `torch.compile(mode="reduce-overhead")` after LoRA init
 
-### SmolVLM2-2.2B (TRL SFTTrainer)
+### SmolVLM2-2.2B (TRL SFTTrainer) — Comparison Orchestrator
 
 Config: `configs/training/finetune_config_smolvlm2.yaml`
+
+**Task**: Same orchestrator task. Research question: does 81-token image compression prevent reliable screen type classification?
 
 Key differences:
 - Uses TRL `SFTTrainer` (wraps PEFT internally)
 - LoRA: `r=8, alpha=8` (smaller rank for smaller model)
 - Prefers BF16 but will be tested FP16 first; document result in ADR-001 update
-- Images compressed to 81 tokens via SigLIP — fast but potentially lower detail
-- Keep JSON output schema flat (SmolVLM2 degrades on deep nesting)
 
 ### Training Infrastructure
 
@@ -245,74 +265,67 @@ Key differences:
 
 | Component | Devcontainer (local) | OpenShift AI |
 |---|---|---|
-| Synthetic data generation | ✅ primary | — |
-| Zero-shot baseline eval | ✅ primary | — |
-| First fine-tuning runs (LoRA) | ✅ primary | — |
-| Scale-out fine-tuning (Ray Train) | — | ✅ post-MVP |
-| MLFlow tracking | ✅ dev | ✅ production |
-| vLLM serving (dev/test) | ✅ port 8001 | — |
-| vLLM serving (production) | — | ✅ KServe |
-| Web app (dev) | ✅ port 8000 | — |
-| Web app (production) | — | ✅ |
-| Jupyter notebooks | ✅ port 8888 | — |
+| Screenshot collection + annotation | Primary | — |
+| Zero-shot baseline eval | Primary | — |
+| First fine-tuning runs (LoRA) | Primary | — |
+| Scale-out fine-tuning (Ray Train) | — | Post-MVP |
+| MLFlow tracking | Dev | Production |
+| vLLM serving (dev/test) | Port 8001 | — |
+| vLLM serving (production) | — | KServe |
+| Web app (dev) | Port 8000 | — |
+| Web app (production) | — | OpenShift AI |
+| Jupyter notebooks | Port 8888 | — |
 
 **Conference talk demo**: runs entirely locally. OpenShift AI appears in the architecture diagram; live deployment is post-MVP.
 
 ---
 
-## 6-Week Implementation Sequence
+## Implementation Sequence
 
-### Week 1: Foundation + Synthetic Data
+### Phase 1: Pierre's Shop MVP
 
 1. Rename `src/stardew-vision/` → `src/stardew_vision/`
-2. Update `pyproject.toml` with all new dependencies
-3. Execute data collection plan Phase A+B+C (see `docs/data-collection-plan.md`)
-   - ✅ **Phase A (partial):** Quality stars + font assets extracted from game files (2026-03-06)
-     - See [datasets/assets/EXTRACTION_SUMMARY.md](../datasets/assets/EXTRACTION_SUMMARY.md)
-   - **Phase A (remaining):** UI frame collection (chest backgrounds)
-   - **Phase B:** Implement `scripts/generate_synthetic_data.py`
-   - **Phase C:** Generate 500 labeled synthetic images
-4. Write `src/stardew_vision/data/dataset.py`
-5. Write `src/stardew_vision/data/item_taxonomy.py`
+2. Update `pyproject.toml` with new dependencies (opencv-python, easyocr, openai)
+3. Collect Pierre's shop screenshots and screen-type diversity screenshots (see `docs/data-collection-plan.md`)
+4. Build anchor template: `datasets/assets/templates/pierres_detail_panel_corner.png`
+5. Write `src/stardew_vision/tools/crop_pierres_detail_panel.py` (OpenCV crop + EasyOCR + parser)
+6. Write unit tests: `tests/test_tools.py` with fixture screenshots
+7. Write `src/stardew_vision/models/vlm_wrapper.py` (Qwen2.5-VL-7B orchestrator, tool-calling format)
+8. Run zero-shot baseline: does Qwen2.5-VL-7B dispatch the correct tool zero-shot?
+9. Fine-tune orchestrator on screen-type training data; log to MLFlow
+10. Write `src/stardew_vision/tts/synthesize.py` (MeloTTS)
+11. Write `src/stardew_vision/webapp/app.py` + `routes.py` + `index.html`
+12. End-to-end integration test: upload Pierre's shop screenshot → audio plays
+13. Add ports 8000, 8001 to `devcontainer.json` `forwardPorts`
 
-### Week 2: Zero-Shot Baseline
+### Phase 2: TV Screen Dialog
 
-6. Write `src/stardew_vision/models/vlm_wrapper.py` (Qwen2.5-VL-7B, FP16)
-7. Write `src/stardew_vision/models/evaluate.py` (all 8 metrics)
-8. Run `notebooks/02_vlm_baseline_comparison.ipynb` — log to MLFlow
-9. Launch community screenshot outreach
+14. Collect TV screen screenshots; annotate with expected text
+15. Write `src/stardew_vision/tools/crop_tv_dialog.py`
+16. Add `crop_tv_dialog` to orchestrator tool list; add training examples
+17. Fine-tune or few-shot the orchestrator on expanded tool set
 
-### Week 3: Fine-Tuning Pipeline
+### Phase 3: Inventory Tooltips
 
-10. Write `src/stardew_vision/models/finetune.py` (LoRA + PEFT)
-11. First fine-tuning run on synthetic data — log to MLFlow
-12. Run post-training evaluation; compare to baseline
-13. Write `scripts/annotate_dataset.py`; begin annotating real screenshots
+18. Collect inventory tooltip screenshots; annotate
+19. Write `src/stardew_vision/tools/crop_inventory_tooltip.py`
+20. Add to orchestrator; fine-tune
 
-### Week 4: TTS + Web App
+### Serve + Polish (all phases)
 
-14. Write `src/stardew_vision/tts/synthesize.py` (MeloTTS)
-15. Write `src/stardew_vision/webapp/app.py` + `routes.py` + `index.html`
-16. End-to-end integration test: upload screenshot → audio
-17. Add ports 8000, 8001 to `devcontainer.json` `forwardPorts`
-
-### Week 5-6: Serve + Polish
-
-18. Configure vLLM local serving; point webapp at it
-19. Retrain with mixed real + synthetic data
-20. Write `src/stardew_vision/models/finetune_smolvlm.py` (TRL SFTTrainer)
-21. Run SmolVLM2 baseline + fine-tuning; add to comparison notebook
-22. Polish `notebooks/04_evaluation_results.ipynb` for talk
-23. Write `scripts/push_to_hf.py`; push dataset + model to HuggingFace
-24. Write OpenShift AI serving manifests
+21. Configure vLLM local serving with tool-calling support
+22. Write `src/stardew_vision/models/finetune_smolvlm.py` (TRL SFTTrainer)
+23. Run SmolVLM2 baseline + fine-tuning; add to comparison notebook
+24. Polish `notebooks/04_evaluation_results.ipynb` for talk
+25. Write `scripts/push_to_hf.py`; push dataset + model to HuggingFace
+26. Write OpenShift AI serving manifests
 
 ### Post-MVP
 
 - Ray Train on OpenShift AI for distributed fine-tuning
 - KubeFlow Pipelines for orchestration
 - Feast feature store (Phase 2 per ADR-006)
-- Option B: end-to-end instruct fine-tuning (for talk comparison story)
-- XTTS/Coqui for higher-quality TTS
+- Chest/inventory grid reading (revisit ADR-007, ADR-008 if prioritized)
 
 ---
 
@@ -337,8 +350,11 @@ Add to `pyproject.toml`:
 "fastapi>=0.115.0",
 "uvicorn[standard]>=0.32.0",
 "python-multipart>=0.0.12",
-# vLLM client
+# vLLM client (tool-calling format)
 "openai>=1.50.0",
+# Extraction agents
+"opencv-python>=4.9.0",
+"easyocr>=1.7.0",
 # Data / evaluation
 "rapidfuzz>=3.9.0",
 "jsonschema>=4.23.0",
@@ -352,8 +368,8 @@ Preserve all entries in `[tool.uv] exclude-dependencies` — these are ROCm-prov
 
 ## HuggingFace Hub Deliverables
 
-- **Dataset**: `{username}/stardew-loot-vision-dataset` — annotated screenshots + dataset card
-- **Model**: `{username}/stardew-vision-vlm` — merged fine-tuned model + model card with eval metrics
+- **Dataset**: `{username}/stardew-screen-vision-dataset` — annotated screenshots + dataset card
+- **Model**: `{username}/stardew-vision-vlm` — merged fine-tuned orchestrator + model card with eval metrics
 
 Both managed via `scripts/push_to_hf.py`. Model card auto-generated from MLFlow run metadata.
 
@@ -363,12 +379,12 @@ Both managed via `scripts/push_to_hf.py`. Model card auto-generated from MLFlow 
 
 The MVP is working when all of the following pass:
 
-- [ ] `python scripts/generate_synthetic_data.py --count 500` produces images + annotations
-- [ ] `python scripts/validate_dataset.py datasets/` reports 0 errors
-- [ ] `python scripts/run_baseline_eval.py` logs metrics to MLFlow
-- [ ] `python src/stardew_vision/models/finetune.py` completes without OOM; checkpoint saved
-- [ ] Post-training CIA-Exact ≥ 80% on validation set
-- [ ] `vllm serve models/fine-tuned/...` starts on port 8001
+- [ ] `src/stardew_vision/tools/crop_pierres_detail_panel.py` extracts correct fields from a fixture screenshot
+- [ ] `pytest tests/test_tools.py` — all extraction unit tests pass
+- [ ] Zero-shot orchestrator correctly dispatches `crop_pierres_detail_panel` for a Pierre's shop screenshot
+- [ ] Fine-tuned orchestrator: screen classification accuracy >= 95% on validation set
+- [ ] Field extraction accuracy >= 90% on Pierre's shop validation screenshots
+- [ ] `vllm serve models/fine-tuned/...` starts on port 8001 with tool-calling enabled
 - [ ] `uvicorn src.stardew_vision.webapp.app:app --port 8000` starts
-- [ ] Browser upload of a test screenshot → audio plays with correct item descriptions
+- [ ] Browser upload of a Pierre's shop screenshot → audio plays with correct item description
 - [ ] `pytest tests/` — all tests pass

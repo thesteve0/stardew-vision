@@ -1,7 +1,9 @@
 # ADR-002: VLM Role Architecture — Structured Output vs. End-to-End Description
 
+> **See ADR-009 for the current architecture.**
+
 **Date**: 2026-03-03
-**Status**: Accepted
+**Status**: Superseded by ADR-009 (2026-03-17)
 **Deciders**: Project team
 
 ## Context
