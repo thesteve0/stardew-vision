@@ -30,10 +30,20 @@
     "--ulimit=stack=67108864",
     "--mount", "type=bind,source=${env:SSH_AUTH_SOCK},target=/tmp/ssh-agent.sock",
     "--mount", "type=bind,source=${localEnv:HOME}/.config/gcloud,target=/home/stpousty-devcontainer/.config/gcloud,readonly",
-    "--mount", "type=bind,source=${localEnv:HOME}/data,target=/data"
+    "--mount", "type=bind,source=${localEnv:HOME}/data,target=/data",
+    // Wayland socket forwarding — mount host socket into container.
+    // Host socket lives at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY (e.g. /run/user/1000/wayland-0).
+    // We mount it to /tmp/$WAYLAND_DISPLAY so it's accessible regardless of XDG_RUNTIME_DIR permissions.
+    "--volume=/run/user/1000/wayland-0:/tmp/wayland-0"
   ],
 
   "containerEnv": {
+    // Wayland display forwarding
+    "WAYLAND_DISPLAY": "wayland-0",
+    "XDG_RUNTIME_DIR": "/tmp",
+    // Tell Qt/GTK to use Wayland backend for cv2.imshow and other GUI apps
+    "QT_QPA_PLATFORM": "wayland",
+    "GDK_BACKEND": "wayland",
     "HIP_VISIBLE_DEVICES": "0",
     "ROCM_HOME": "/opt/rocm",
     "ROCBLAS_USE_HIPBLASLT": "1",
