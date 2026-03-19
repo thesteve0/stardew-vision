@@ -214,8 +214,12 @@ GETTING_STARTED.md
 # Do NOT ignore template_docs/ - users need these docs
 
 # Stardew Vision project-specific ignores
-# Host-volume-mounted data and model directories (not committed to git)
-datasets/
+# Host-volume-mounted data and model directories (not committed to git).
+# We ignore specific subdirs rather than datasets/ wholesale so that
+# datasets/assets/templates/ (anchor PNGs) can be committed to git (ADR-010).
+datasets/raw/
+datasets/screenshots/
+datasets/annotations/
 models/
 mlruns/
 
