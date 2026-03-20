@@ -19,7 +19,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 FIXTURE_SCREENSHOT = FIXTURES / "pierre_shop_001.png"
 TEMPLATES_DIR = Path(__file__).parents[1] / "datasets" / "assets" / "templates"
 TEMPLATE_FILE = TEMPLATES_DIR / "pierres_detail_panel_corner.png"
-LAYOUT_FILE = TEMPLATES_DIR / "panel_layout.json"
+LAYOUT_FILE = TEMPLATES_DIR / "pierre_panel_layout.json"
 
 # ---------------------------------------------------------------------------
 # Ground truth — update these values to match your fixture screenshot

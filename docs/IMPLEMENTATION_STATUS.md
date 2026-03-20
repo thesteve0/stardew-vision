@@ -13,7 +13,7 @@
 1. **Anchor Template Extraction**
    - Tool: `scripts/extract_anchor_template.py`
    - Template: `datasets/assets/templates/pierres_detail_panel_corner.png` (400×945 px)
-   - Layout: `datasets/assets/templates/panel_layout.json` with relative coordinates
+   - Layout: `datasets/assets/templates/pierre_panel_layout.json` with relative coordinates
    - Coordinates: `x=0.6875, y=0.1292, w=0.25, h=0.7875` (resolution-independent)
 
 2. **OCR Extraction**
@@ -170,7 +170,7 @@ pytest = ">=9.0.0"
 
 ### Templates & Config
 - ✅ `datasets/assets/templates/pierres_detail_panel_corner.png` (created)
-- ✅ `datasets/assets/templates/panel_layout.json` (created)
+- ✅ `datasets/assets/templates/pierre_panel_layout.json` (created)
 - ✅ `datasets/assets/templates/debug_selection.png` (created)
 
 ### Scripts

@@ -23,7 +23,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 _TEMPLATES_DIR = Path(__file__).parents[3] / "datasets" / "assets" / "templates"
-_LAYOUT_FILE = _TEMPLATES_DIR / "panel_layout.json"
+_LAYOUT_FILE = _TEMPLATES_DIR / "pierre_panel_layout.json"
 _TEMPLATE_FILE = _TEMPLATES_DIR / "pierres_detail_panel_corner.png"
 
 # Stardew Valley's discrete UI scale factors
@@ -226,10 +226,10 @@ def parse_pierre_fields(ocr_results: list[dict]) -> dict:
 
 
 def _load_panel_layout() -> dict:
-    """Load panel_layout.json to get the panel's full relative bounding box."""
+    """Load pierre_panel_layout.json to get the panel's full relative bounding box."""
     if not _LAYOUT_FILE.exists():
         raise FileNotFoundError(
-            f"panel_layout.json not found at {_LAYOUT_FILE}. "
+            f"pierre_panel_layout.json not found at {_LAYOUT_FILE}. "
             "Run scripts/extract_anchor_template.py first."
         )
     with open(_LAYOUT_FILE) as f:
@@ -261,7 +261,7 @@ def crop_pierres_detail_panel(image_path: str | Path, debug: bool = False) -> di
     PanelNotFoundError
         If the template match confidence is below 0.85.
     FileNotFoundError
-        If the anchor template or panel_layout.json are missing.
+        If the anchor template or pierre_panel_layout.json are missing.
     """
     image_path = Path(image_path)
     if not image_path.exists():
@@ -284,7 +284,7 @@ def crop_pierres_detail_panel(image_path: str | Path, debug: bool = False) -> di
     layout = _load_panel_layout()
     panel_rel = layout.get("panel_rel")
     if panel_rel is None:
-        raise KeyError("panel_layout.json missing 'panel_rel' key.")
+        raise KeyError("pierre_panel_layout.json missing 'panel_rel' key.")
 
     # Locate the anchor corner to verify and scale
     rel_x, rel_y, rel_w, rel_h, scale, conf = locate_panel(img, template)
@@ -292,24 +292,11 @@ def crop_pierres_detail_panel(image_path: str | Path, debug: bool = False) -> di
     if debug:
         print(f"Template match: confidence={conf:.3f}, scale={scale}, corner=({rel_x:.3f},{rel_y:.3f})")
 
-    # Use the stored panel_rel dimensions scaled by the detected UI scale
-    full_panel_rel = {
-        "x": panel_rel["x"] * scale,
-        "y": panel_rel["y"] * scale,
-        "w": panel_rel["w"] * scale,
-        "h": panel_rel["h"] * scale,
-    }
-    # Offset to the panel position detected via template match
-    # The template covers the top-left corner; panel_rel is relative to the corner origin
-    full_rel_box = (
-        rel_x + full_panel_rel["x"] - full_panel_rel["x"],  # anchor IS the panel origin
-        rel_y + full_panel_rel["y"] - full_panel_rel["y"],
-        full_panel_rel["w"],
-        full_panel_rel["h"],
-    )
-    # Simpler: the detected (rel_x, rel_y) is the panel top-left corner;
-    # panel_rel["w"] and ["h"] give the full panel extent.
-    full_rel_box = (rel_x, rel_y, full_panel_rel["w"], full_panel_rel["h"])
+    # The detected (rel_x, rel_y) is the panel top-left corner.
+    # Scale only the panel dimensions (width/height) by the detected UI scale factor.
+    scaled_w = panel_rel["w"] * scale
+    scaled_h = panel_rel["h"] * scale
+    full_rel_box = (rel_x, rel_y, scaled_w, scaled_h)
 
     panel_crop = crop_panel(img, full_rel_box)
     ocr_results = run_ocr(panel_crop)

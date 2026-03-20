@@ -57,7 +57,9 @@
       "Bash(echo \"DISPLAY=$DISPLAY\")",
       "Bash(echo \"XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR\")",
       "Bash(python -c \"import PyQt6; print\\(''PyQt6 version:'', PyQt6.QtCore.qVersion\\(\\)\\)\")",
-      "Bash(python -c \"import PyQt5; print\\(''PyQt5 version:'', PyQt5.QtCore.qVersion\\(\\)\\)\")"
+      "Bash(python -c \"import PyQt5; print\\(''PyQt5 version:'', PyQt5.QtCore.qVersion\\(\\)\\)\")",
+      "Bash(pytest tests/test_tools.py -v)",
+      "Bash(pytest:*)"
     ]
   }
 }

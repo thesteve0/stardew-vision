@@ -5,7 +5,7 @@ Usage:
     python scripts/extract_anchor_template.py <screenshot_path> [--output-dir <dir>]
 
 Interactively (or via terminal prompt) selects the panel corner region,
-saves it as a PNG anchor template, and writes panel_layout.json with
+saves it as a PNG anchor template, and writes pierre_panel_layout.json with
 relative coordinates.
 """
 
@@ -63,7 +63,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         default="datasets/assets/templates",
-        help="Directory to save template PNG and panel_layout.json (default: datasets/assets/templates)",
+        help="Directory to save template PNG and pierre_panel_layout.json (default: datasets/assets/templates)",
     )
     args = parser.parse_args()
 
@@ -109,7 +109,7 @@ def main() -> None:
     cv2.imwrite(str(template_png), corner_crop)
     print(f"Template saved: {template_png}")
 
-    # Save panel_layout.json
+    # Save pierre_panel_layout.json
     layout = {
         "template_file": "pierres_detail_panel_corner.png",
         "extracted_from_resolution": [img_w, img_h],
@@ -122,7 +122,7 @@ def main() -> None:
             "Update 'panel_rel' w/h to cover the full detail panel if needed."
         ),
     }
-    layout_json = output_dir / "panel_layout.json"
+    layout_json = output_dir / "pierre_panel_layout.json"
     with open(layout_json, "w") as f:
         json.dump(layout, f, indent=2)
     print(f"Layout JSON saved: {layout_json}")
@@ -134,7 +134,7 @@ def main() -> None:
 
     print("\nDone. Verify the template PNG and debug image look correct.")
     print("If the full detail panel is larger than the selected corner, update")
-    print(f"'panel_rel' in {layout_json} to cover the full panel area.")
+    print(f"'panel_rel' in pierre_panel_layout.json to cover the full panel area.")
 
 
 if __name__ == "__main__":
