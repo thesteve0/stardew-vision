@@ -22,7 +22,7 @@ import numpy as np
 # Paths
 # ---------------------------------------------------------------------------
 
-_TEMPLATES_DIR = Path(__file__).parents[4] / "datasets" / "assets" / "templates"
+_TEMPLATES_DIR = Path(__file__).parents[3] / "datasets" / "assets" / "templates"
 _LAYOUT_FILE = _TEMPLATES_DIR / "panel_layout.json"
 _TEMPLATE_FILE = _TEMPLATES_DIR / "pierres_detail_panel_corner.png"
 
@@ -56,7 +56,6 @@ def _load_ocr():
         use_doc_unwarping=False,
         use_textline_orientation=False,
         lang="en",
-        device="cpu",
     )
 
 
@@ -137,23 +136,25 @@ def run_ocr(cropped: np.ndarray) -> list[dict]:
     """
     ocr = _load_ocr()
     panel_h = cropped.shape[0]
-    result = ocr.ocr(cropped, cls=False)
+    result = ocr.predict(cropped)
 
     records = []
-    # PaddleOCR 3.x returns a list of pages; each page is a list of lines.
-    if not result:
+    # PaddleOCR 3.x returns a list with one dict containing 'rec_texts', 'rec_scores', 'rec_polys'
+    if not result or not result[0]:
         return records
 
-    lines = result[0] if isinstance(result[0], list) else result
-    if lines is None:
+    page = result[0]
+    if not isinstance(page, dict):
         return records
 
-    for line in lines:
-        if line is None:
+    texts = page.get('rec_texts', [])
+    scores = page.get('rec_scores', [])
+    polys = page.get('rec_polys', [])
+
+    for text, score, poly in zip(texts, scores, polys):
+        if poly is None:
             continue
-        # Each line: [[x1,y1],[x2,y2],[x3,y3],[x4,y4]], (text, score)
-        box, (text, score) = line
-        ys = [pt[1] for pt in box]
+        ys = [pt[1] for pt in poly]
         centre_y = (min(ys) + max(ys)) / 2
         rel_y = centre_y / panel_h if panel_h > 0 else 0.0
         records.append({"text": text, "score": float(score), "rel_y": rel_y})
@@ -166,9 +167,9 @@ def parse_pierre_fields(ocr_results: list[dict]) -> dict:
     Assign OCR text blocks to Pierre's shop fields by relative Y position.
 
     Panel layout (approximate relative Y within the cropped detail panel):
-      0.00 – 0.20  → item name
-      0.20 – 0.55  → description (may span multiple lines)
-      0.55 – 1.00  → price / quantity / total rows
+      0.00 – 0.05  → item name
+      0.05 – 0.12  → description (may span multiple lines)
+      0.12 – 1.00  → price / quantity / total rows
     """
     sorted_results = sorted(ocr_results, key=lambda r: r["rel_y"])
 
@@ -182,9 +183,9 @@ def parse_pierre_fields(ocr_results: list[dict]) -> dict:
         text = rec["text"].strip()
         y = rec["rel_y"]
 
-        if y < 0.20:
+        if y < 0.05:
             name_parts.append(text)
-        elif y < 0.55:
+        elif y < 0.12:
             desc_parts.append(text)
         else:
             price_texts.append((y, text))
@@ -193,42 +194,27 @@ def parse_pierre_fields(ocr_results: list[dict]) -> dict:
     description = " ".join(desc_parts).strip()
 
     # Extract numeric price values from the lower zone
-    prices: list[tuple[float, int]] = []
-    for y, text in price_texts:
-        m = price_pattern.search(text)
-        if m:
-            val = int(m.group(1).replace(",", ""))
-            prices.append((y, val))
-
-    # Assign price fields by position
-    # Expected order (top to bottom in lower panel): price_per_unit, quantity, total
     price_per_unit = 0
     quantity_selected = 0
     total_cost = 0
 
-    # Quantity is usually a plain integer without 'g'; prices have 'g'
-    qty_pattern = re.compile(r"^\d+$")
-    qty_values: list[tuple[float, int]] = []
-    price_g_values: list[tuple[float, int]] = []
+    # Pattern for "x{qty}: {total}" format
+    qty_total_pattern = re.compile(r"x(\d+):\s*(\d[\d,]*)")
 
     for y, text in price_texts:
         text_clean = text.strip()
-        if qty_pattern.match(text_clean):
-            qty_values.append((y, int(text_clean)))
-        else:
-            m = price_pattern.search(text_clean)
-            if m:
-                price_g_values.append((y, int(m.group(1).replace(",", ""))))
 
-    if qty_values:
-        quantity_selected = qty_values[0][1]
+        # Check for quantity/total line (format: "x60: 1200")
+        qty_total_match = qty_total_pattern.search(text_clean)
+        if qty_total_match:
+            quantity_selected = int(qty_total_match.group(1))
+            total_cost = int(qty_total_match.group(2).replace(",", ""))
+            continue
 
-    if len(price_g_values) >= 2:
-        price_g_values_sorted = sorted(price_g_values, key=lambda t: t[0])
-        price_per_unit = price_g_values_sorted[0][1]
-        total_cost = price_g_values_sorted[-1][1]
-    elif len(price_g_values) == 1:
-        price_per_unit = price_g_values[0][1]
+        # Check for plain price (just a number, possibly with 'g')
+        price_match = price_pattern.search(text_clean)
+        if price_match and price_per_unit == 0:
+            price_per_unit = int(price_match.group(1).replace(",", ""))
 
     return {
         "name": name,

@@ -25,12 +25,12 @@ LAYOUT_FILE = TEMPLATES_DIR / "panel_layout.json"
 # Ground truth — update these values to match your fixture screenshot
 # ---------------------------------------------------------------------------
 GROUND_TRUTH = {
-    "name": "Parsnip",
+    "name": "Parsnip Seeds",
     "price_per_unit": 20,
-    "quantity_selected": 1,
-    "total_cost": 20,
+    "quantity_selected": 60,
+    "total_cost": 1200,
     # description checked by rapidfuzz ratio, not exact match
-    "description_fragment": "parsnip",
+    "description_fragment": "spring",
 }
 
 
@@ -94,21 +94,22 @@ def test_parse_pierre_fields_types():
 
 
 def test_parse_pierre_fields_price_parsing():
-    """Numeric price extraction handles 'g' suffix and commas."""
+    """Numeric price extraction handles 'x60: 1200' format."""
     from stardew_vision.tools.crop_pierres_detail_panel import parse_pierre_fields
 
     ocr = [
-        {"text": "Parsnip", "score": 0.99, "rel_y": 0.05},
-        {"text": "A spring crop.", "score": 0.95, "rel_y": 0.30},
-        {"text": "20g", "score": 0.97, "rel_y": 0.65},
-        {"text": "1", "score": 0.98, "rel_y": 0.75},
-        {"text": "20g", "score": 0.96, "rel_y": 0.85},
+        {"text": "Parsnip Seeds", "score": 0.99, "rel_y": 0.03},
+        {"text": "Plant these in the spring.", "score": 0.95, "rel_y": 0.07},
+        {"text": "Takes 4 days to mature.", "score": 0.95, "rel_y": 0.10},
+        {"text": "20 ", "score": 0.97, "rel_y": 0.14},
+        {"text": "x60: 1200", "score": 0.98, "rel_y": 0.94},
     ]
     result = parse_pierre_fields(ocr)
-    assert result["name"] == "Parsnip"
+    assert result["name"] == "Parsnip Seeds"
+    assert result["description"] == "Plant these in the spring. Takes 4 days to mature."
     assert result["price_per_unit"] == 20
-    assert result["quantity_selected"] == 1
-    assert result["total_cost"] == 20
+    assert result["quantity_selected"] == 60
+    assert result["total_cost"] == 1200
 
 
 # ---------------------------------------------------------------------------

@@ -50,13 +50,24 @@ Main model architecture
 
 **Common commands**:
 
-unknown at this time
 ```bash
+# Run extraction tool on a screenshot
+python scripts/test_extraction_tool.py
+
+# Test OCR output
+python scripts/test_ocr_on_panel.py
 ```
 
 **Testing**:
 ```bash
+# Run all tests
 pytest tests/
+
+# Run specific test file
+pytest tests/test_tools.py -v
+
+# Run with coverage
+pytest tests/ --cov=src/stardew_vision
 ```
 
 **Linting/Formatting** (if configured):
@@ -93,7 +104,8 @@ See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 
 ## Known Issues and Gotchas
 
-- `src/stardew-vision/` must be renamed to `src/stardew_vision/` before any code is written there (hyphen is illegal as Python package name)
+- `src/stardew-vision/` must be renamed to `src/stardew_vision/` before any code is written there (hyphen is illegal as Python package name) [RESOLVED]
+- **PaddlePaddle version**: MUST use `paddlepaddle==3.2.0`. Version 3.3.0 has an OneDNN PIR conversion bug that breaks CPU inference with error `ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]`. Do NOT upgrade without testing.
 - SmolVLM2 prefers BF16 but ROCm 7.2 only validates FP16 — test FP16 first; if unstable, document BF16 result in ADR-001 update
 - SmolVLM2's 81-token image compression may miss fine-grained pixel-art detail — this is the hypothesis to test
 - vLLM port 8001 and webapp port 8000 need to be added to `devcontainer.json` `forwardPorts`
@@ -109,7 +121,10 @@ See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 
 ## Testing Strategy
 
-- `pytest tests/` — unit tests for data pipeline, VLM wrapper, TTS, webapp
+- `pytest tests/` — unit tests for extraction tools, VLM wrapper, TTS, webapp
+  - **Status**: Pierre's shop extraction tool has 8/8 tests passing (2026-03-20)
+  - Fixture: `tests/fixtures/pierre_shop_001.png` (1600×1200 screenshot)
+  - Coverage: template matching, OCR, field parsing, error handling
 - End-to-end: upload test screenshot → verify audio response via webapp
 - Evaluation metrics logged to MLFlow are the primary quality signal (not just pytest)
 - Test set = real screenshots only (not used in training)
