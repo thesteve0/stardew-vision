@@ -4,6 +4,11 @@
 **Talk deadline**: 1-2 months
 **Status**: Phase 1 extraction tool complete — Pierre's shop OCR working with 85-99% confidence
 
+**NEXT SESSION (2026-03-21)**: Agent/tool-calling integration
+- Step 1: Define extraction tool in OpenAI function-calling format
+- Step 2: Build VLM orchestrator to call the agent
+- Research: LangGraph, CrewAI, or other agent frameworks
+
 This is the authoritative project plan. It is referenced from `CLAUDE.md`. Update this document as decisions change; use the ADRs in `docs/adr/` to document *why* each decision was made.
 
 ---

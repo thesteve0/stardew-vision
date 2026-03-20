@@ -187,19 +187,32 @@ pytest = ">=9.0.0"
 
 ## Next Steps
 
+### NEXT SESSION (2026-03-21): Agent/Tool-Calling Integration
+
+**Step 1**: Define extraction tool as callable agent
+- Add OpenAI function-calling format to `src/stardew_vision/tools/__init__.py`
+- Define `TOOL_DEFINITIONS` with schema
+- Map tool names to Python functions
+
+**Step 2**: Build VLM orchestrator to call the agent
+- Create `src/stardew_vision/models/vlm_wrapper.py`
+- Wrap Qwen2.5-VL-7B with tool-calling interface
+- Test: Submit Pierre's shop screenshot → VLM calls `crop_pierres_detail_panel`
+- Research: LangGraph, CrewAI, or other agent frameworks for orchestration
+
+---
+
+### Future Priorities
+
 **Priority 1**: Collect more Pierre's shop screenshots
 - Target: 20-50 screenshots at different resolutions and items
 - Use for validation and testing robustness
 
-**Priority 2**: Build VLM orchestrator wrapper
-- Wrap Qwen2.5-VL-7B with OpenAI-compatible tool-calling API
-- Test zero-shot screen classification
-
-**Priority 3**: TTS integration
+**Priority 2**: TTS integration
 - Integrate MeloTTS for audio narration
 - Create narration templates
 
-**Priority 4**: Web application
+**Priority 3**: Web application
 - FastAPI server with upload endpoint
 - Integrate extraction + TTS pipeline
 - Return audio response
