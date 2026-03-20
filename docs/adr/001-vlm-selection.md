@@ -22,7 +22,7 @@ Constraints:
 **Candidate A (Primary)**: `Qwen/Qwen2.5-VL-7B-Instruct`
 **Candidate B (Comparison)**: `HuggingFaceTB/SmolVLM2-2.2B-Instruct`
 
-Both will be evaluated zero-shot first, then fine-tuned on the same dataset. Results are compared in `notebooks/02_vlm_baseline_comparison.ipynb`.
+Both will be evaluated zero-shot first, then fine-tuned on the same dataset. Results are compared in `scripts/02_vlm_baseline_comparison.py`.
 
 ## Alternatives Considered
 
