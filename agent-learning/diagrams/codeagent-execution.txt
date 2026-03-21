@@ -1,0 +1,335 @@
+CODEAGENT EXECUTION FLOW
+========================
+
+How Smolagents CodeAgent generates and executes Python code to call tools.
+
+═══════════════════════════════════════════════════════════════════════════
+                    WHY CODEAGENT vs TOOLCALLINGAGENT?
+═══════════════════════════════════════════════════════════════════════════
+
+TOOLCALLINGAGENT (JSON-based):
+    VLM returns: {"tool": "my_tool", "arguments": {"x": 1}}
+    Framework parses JSON and calls: my_tool(x=1)
+
+    Pros: Simple, widely supported
+    Cons: Limited composability, type errors only at runtime
+
+CODEAGENT (Python-based):
+    VLM returns: Python code as a string
+    Framework executes code in safe environment
+
+    Pros: Composable, type-checked, debuggable
+    Cons: Requires code execution sandbox
+
+We use CodeAgent because:
+  ✅ More robust for complex workflows
+  ✅ Better error messages (Python stack traces)
+  ✅ Composable (can chain multiple tool calls)
+  ✅ Type-checked by Python runtime
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        CODEAGENT FLOW
+═══════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    STEP 1: DEVELOPER CREATES TOOL CLASS                   │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    from smolagents import Tool
+
+    class CropPierresPanelTool(Tool):
+        name = "crop_pierres_detail_panel"
+        description = "Extract item details from Pierre's shop"
+        inputs = {
+            "image_path": {"type": "string", "description": "..."}
+        }
+        output_type = "dict"
+
+        def forward(self, image_path: str):
+            from stardew_vision.tools import crop_pierres_detail_panel
+            return crop_pierres_detail_panel(image_path)
+
+    Tool class contains:
+      - Metadata (name, description, inputs, output_type)
+      - Implementation (forward method)
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    STEP 2: INITIALIZE CODEAGENT                           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    from smolagents import CodeAgent, LiteLLMModel
+
+    model = LiteLLMModel(
+        model_id="Qwen2.5-VL-7B-Instruct",
+        base_url="http://localhost:8001/v1"
+    )
+
+    agent = CodeAgent(
+        tools=[CropPierresPanelTool()],
+        model=model,
+        max_steps=3,
+        verbosity=2
+    )
+
+    CodeAgent:
+      - Converts Tool classes to tool definitions (auto-generated)
+      - Prepares system prompt with available tools
+      - Sets up code execution sandbox
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    STEP 3: USER INVOKES AGENT                             │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    result = agent.run(
+        "Extract item info from /path/to/screenshot.png"
+    )
+
+    Agent begins multi-step reasoning loop
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    STEP 4: AGENT SENDS PROMPT TO VLM                      │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    Prompt sent to VLM:
+    ┌────────────────────────────────────────────────────────┐
+    │ You are a Python coding assistant.                     │
+    │                                                        │
+    │ Available tools:                                       │
+    │   - crop_pierres_detail_panel(image_path: str) -> dict │
+    │     Extract item details from Pierre's shop           │
+    │                                                        │
+    │ User request: Extract item info from /path/to/...     │
+    │                                                        │
+    │ Write Python code to complete the task.                │
+    │ Output only the code, no explanations.                 │
+    └────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    STEP 5: VLM GENERATES PYTHON CODE                      │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    VLM response (Python code as string):
+    ┌────────────────────────────────────────────────────────┐
+    │ image_path = "/path/to/screenshot.png"                 │
+    │ result = crop_pierres_detail_panel(image_path=image_path)│
+    │ print(result)                                          │
+    └────────────────────────────────────────────────────────┘
+
+    This is NOT JSON! It's actual Python code.
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    STEP 6: CODEAGENT EXECUTES CODE                        │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    CodeAgent:
+      1. Parses the Python code (validates syntax)
+      2. Creates execution namespace with available tools
+      3. Executes code in sandbox (restricted exec)
+      4. Captures output and return value
+
+    ┌────────────────────────────────────────────────────────┐
+    │  Execution namespace:                                  │
+    │    {                                                   │
+    │      "crop_pierres_detail_panel": <bound method>,      │
+    │      "print": <safe print function>,                   │
+    │      ... (other safe builtins)                         │
+    │    }                                                   │
+    └────────────────────────────────────────────────────────┘
+
+    Code runs:
+      image_path = "/path/to/screenshot.png"
+      result = crop_pierres_detail_panel(image_path=image_path)
+      print(result)
+
+    Tool implementation (forward method) is called:
+      CropPierresPanelTool.forward("/path/to/screenshot.png")
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    STEP 7: TOOL EXECUTES                                  │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    forward() method runs:
+    ┌────────────────────────────────────────────────────────┐
+    │  from stardew_vision.tools import crop_pierres_detail_panel│
+    │  return crop_pierres_detail_panel(image_path)          │
+    └────────────────────────────────────────────────────────┘
+
+    Actual extraction:
+      1. OpenCV loads image
+      2. Template matching finds panel
+      3. PaddleOCR extracts text
+      4. Parser structures fields
+      5. Returns dict:
+         {
+           "name": "Parsnip",
+           "price_per_unit": 20,
+           ...
+         }
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    STEP 8: CODEAGENT RETURNS RESULT                       │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    CodeAgent captures execution result:
+      - Printed output (from print(result))
+      - Return value (from last expression)
+      - Any exceptions raised
+
+    ┌────────────────────────────────────────────────────────┐
+    │  Agent result:                                         │
+    │    {                                                   │
+    │      "name": "Parsnip",                                │
+    │      "description": "A spring vegetable...",           │
+    │      "price_per_unit": 20,                             │
+    │      "quantity_selected": 5,                           │
+    │      "total_cost": 100                                 │
+    │    }                                                   │
+    └────────────────────────────────────────────────────────┘
+
+    Result is returned to caller
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        MULTI-STEP REASONING
+═══════════════════════════════════════════════════════════════════════════
+
+If task requires multiple steps, CodeAgent loops:
+
+    Step 1: VLM generates code → Execute → Capture result
+    Step 2: VLM sees result, generates more code → Execute → Capture result
+    Step 3: VLM decides task is complete → Return final result
+
+Example with multiple tools:
+
+    User: "Identify the screen type and extract details"
+
+    Step 1 (VLM generates):
+        screen_type = get_screen_type(image_path="/path/to/screenshot.png")
+        print(screen_type)
+
+    Step 1 (execution result):
+        {"screen_type": "pierre_shop"}
+
+    Step 2 (VLM sees result, generates):
+        if screen_type["screen_type"] == "pierre_shop":
+            details = crop_pierres_detail_panel(image_path="/path/to/screenshot.png")
+            print(details)
+
+    Step 2 (execution result):
+        {"name": "Parsnip", ...}
+
+    Final result returned to user
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        ERROR HANDLING
+═══════════════════════════════════════════════════════════════════════════
+
+Python execution errors are caught and shown to VLM:
+
+    Step 1 (VLM generates buggy code):
+        result = crop_pierres_detail_panel(image_path)  # Oops, undefined
+
+    Step 1 (execution error):
+        NameError: name 'image_path' is not defined
+
+    Step 2 (VLM sees error, fixes code):
+        image_path = "/path/to/screenshot.png"
+        result = crop_pierres_detail_panel(image_path)
+        print(result)
+
+    Step 2 (execution success):
+        {"name": "Parsnip", ...}
+
+This self-correction is why CodeAgent is robust!
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        SECURITY: CODE SANDBOX
+═══════════════════════════════════════════════════════════════════════════
+
+CodeAgent executes code in a restricted namespace:
+
+    ALLOWED:
+      ✅ Tool functions (your defined tools)
+      ✅ Safe builtins (print, len, range, etc.)
+      ✅ Basic operations (+, -, *, /, ==, etc.)
+
+    BLOCKED:
+      ❌ File I/O (open, read, write) - unless via tools
+      ❌ Network access (requests, urllib) - unless via tools
+      ❌ System commands (os.system, subprocess)
+      ❌ Import arbitrary modules (eval, exec, __import__)
+
+This prevents malicious code from:
+  - Reading/writing arbitrary files
+  - Making network requests
+  - Running system commands
+
+Tools can still do these things (they're in your control), but the VLM-
+generated code itself is sandboxed.
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        KEY TAKEAWAYS
+═══════════════════════════════════════════════════════════════════════════
+
+1. CODEAGENT GENERATES PYTHON CODE, NOT JSON
+   - More expressive than JSON function calls
+   - Type-checked by Python runtime
+   - Debuggable with stack traces
+
+2. TOOLS ARE PYTHON CLASSES
+   - Tool class defines metadata + implementation
+   - forward() method is the actual implementation
+   - Metadata is auto-converted to tool definitions
+
+3. EXECUTION IS SANDBOXED
+   - VLM-generated code runs in restricted namespace
+   - Only allowed: tools + safe builtins
+   - Security boundary between VLM and system
+
+4. MULTI-STEP REASONING IS AUTOMATIC
+   - Agent loops until task complete
+   - Each step sees previous results
+   - Self-corrects on errors
+
+5. SAME PATTERN, DIFFERENT ABSTRACTION
+   - Manual (Module 1): You parse JSON and call functions
+   - CodeAgent (Module 2): VLM writes Python, agent executes
+   - Same underlying mechanism, different interface
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        COMPARISON TABLE
+═══════════════════════════════════════════════════════════════════════════
+
+┌────────────────────┬───────────────────────┬───────────────────────────┐
+│ Aspect             │ Manual Dispatch       │ CodeAgent                 │
+├────────────────────┼───────────────────────┼───────────────────────────┤
+│ VLM Output         │ JSON                  │ Python code               │
+│ Parsing            │ Manual (json.loads)   │ Auto (AST parser)         │
+│ Dispatch           │ Registry lookup       │ Exec in namespace         │
+│ Type safety        │ Runtime only          │ Runtime + Python checks   │
+│ Composability      │ Manual chaining       │ Auto (multi-step)         │
+│ Error messages     │ JSON parsing errors   │ Python stack traces       │
+│ Debugging          │ Print JSON            │ Print code + output       │
+│ Lines of code      │ ~20 for dispatch      │ ~5 for agent setup        │
+└────────────────────┴───────────────────────┴───────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        RELATED DIAGRAMS
+═══════════════════════════════════════════════════════════════════════════
+
+- tool-calling-flow.txt        - General tool calling flow
+- vllm-architecture.txt        - How vLLM serves the VLM
+- production-pipeline.txt      - Complete production system

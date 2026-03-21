@@ -1,0 +1,483 @@
+PHASE PROGRESSION
+=================
+
+How Stardew Vision evolves from MVP to multi-screen to multi-agent.
+
+═══════════════════════════════════════════════════════════════════════════
+                    TIMELINE AND COMPLEXITY GROWTH
+═══════════════════════════════════════════════════════════════════════════
+
+PHASE 1 (MVP)                 PHASE 2 (Multi-screen)       PHASE 3 (Multi-agent)
+Week 1-2                      Week 3-5                     Week 6-8
+────────────                  ──────────────────           ──────────────────
+
+Simple                        Medium                       Complex
+↓                             ↓                            ↓
+1 screen type                 3+ screen types              Validation layer
+1 extraction tool             3+ extraction tools          Quality checks
+Smolagents                    Smolagents + routing         Multi-agent
+                              (maybe LangGraph)            collaboration
+
+MVP MILESTONE:                MULTI-SCREEN MILESTONE:      VALIDATION MILESTONE:
+✅ Pierre's shop works        ✅ TV dialog extraction       ✅ Validator agent
+✅ Audio output               ✅ Inventory extraction       ✅ Self-correction
+✅ Web upload                 ✅ Screen classification      ✅ Quality scores
+✅ Production deployment      ✅ Conditional routing        ✅ 95%+ accuracy
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    PHASE 1: MVP (PIERRE'S SHOP ONLY)
+═══════════════════════════════════════════════════════════════════════════
+
+SCOPE:
+  - Single screen type: Pierre's General Store detail panel
+  - Single extraction tool
+  - Basic VLM orchestration
+  - Audio output (MeloTTS)
+  - Web upload interface
+
+ARCHITECTURE:
+
+  User Upload → FastAPI → VLMOrchestrator → Smolagents CodeAgent
+                                              ↓
+                                    crop_pierres_detail_panel
+                                              ↓
+                                    OpenCV + PaddleOCR
+                                              ↓
+                                    JSON: {name, price, ...}
+                                              ↓
+                                         MeloTTS
+                                              ↓
+                                      Audio WAV file
+
+TOOLS:
+  1. crop_pierres_detail_panel
+     - Template match for panel location
+     - PaddleOCR for text extraction
+     - Field parsing (name, description, price, quantity, total)
+
+VLM ORCHESTRATION:
+  - Smolagents CodeAgent
+  - Single tool, no routing needed
+  - Simple prompt: "Extract item info from screenshot"
+
+COMPLEXITY:
+  - Lines of code: ~500
+  - No conditional logic
+  - No state management
+  - Minimal framework usage
+
+SUCCESS METRICS:
+  - Extraction accuracy: >90%
+  - Latency: <3 seconds
+  - Audio quality: Understandable
+  - Uptime: >95%
+
+DEPLOYMENT:
+  - FastAPI on OpenShift AI
+  - vLLM serving Qwen2.5-VL-7B
+  - 1 replica each (no scaling yet)
+
+LIMITATIONS:
+  ❌ Only works for Pierre's shop
+  ❌ No other screen types
+  ❌ No validation/quality checks
+  ❌ Hardcoded tool selection
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    PHASE 2: MULTI-SCREEN SUPPORT
+═══════════════════════════════════════════════════════════════════════════
+
+SCOPE:
+  - 3+ screen types: Pierre's shop, TV dialog, Inventory
+  - Screen classification
+  - Conditional routing to correct tool
+  - Fine-tuned VLM for screen classification
+
+ARCHITECTURE:
+
+  User Upload → FastAPI → VLMOrchestrator → Smolagents CodeAgent
+                                              ↓
+                                      "Classify screen type"
+                                              ↓
+                            ┌─────────────────┼─────────────────┐
+                            │                 │                 │
+                      pierre_shop        tv_dialog         inventory
+                            │                 │                 │
+                            ▼                 ▼                 ▼
+                  crop_pierres_detail  extract_tv_dialog  extract_inventory
+                            │                 │                 │
+                            └─────────────────┴─────────────────┘
+                                              ↓
+                                    JSON (screen-specific)
+                                              ↓
+                                         MeloTTS
+                                              ↓
+                                      Audio WAV file
+
+TOOLS:
+  1. classify_screen_type
+     - VLM-based classification
+     - Returns: {screen_type: "pierre_shop" | "tv_dialog" | "inventory"}
+
+  2. crop_pierres_detail_panel
+     - (same as Phase 1)
+
+  3. extract_tv_dialog
+     - Template match for TV frame
+     - OCR for dialog text
+     - Return: {speaker: "...", dialog: "..."}
+
+  4. extract_inventory
+     - Grid detection
+     - Item recognition (via sprite matching or VLM)
+     - Return: {items: [{name, quantity, quality}, ...]}
+
+VLM ORCHESTRATION:
+  - Smolagents CodeAgent with multiple tools
+  - VLM writes Python code with if/else:
+
+    screen_type = classify_screen_type(image_path)
+
+    if screen_type["screen_type"] == "pierre_shop":
+        result = crop_pierres_detail_panel(image_path)
+    elif screen_type["screen_type"] == "tv_dialog":
+        result = extract_tv_dialog(image_path)
+    elif screen_type["screen_type"] == "inventory":
+        result = extract_inventory(image_path)
+    else:
+        result = {"error": "Unknown screen type"}
+
+  - OR: Add LangGraph if routing logic becomes complex (>20 lines)
+
+LANGGRAPH OPTION (if needed):
+
+  from langgraph.graph import StateGraph
+
+  graph = StateGraph(State)
+  graph.add_node("classify", classify_node)
+  graph.add_node("extract_pierre", extract_pierre_node)
+  graph.add_node("extract_tv", extract_tv_node)
+  graph.add_node("extract_inventory", extract_inventory_node)
+
+  graph.add_conditional_edges(
+      "classify",
+      lambda state: state["screen_type"],
+      {
+          "pierre_shop": "extract_pierre",
+          "tv_dialog": "extract_tv",
+          "inventory": "extract_inventory"
+      }
+  )
+
+  Benefit: Clear state machine, visual graph
+  Cost: Added complexity, learning curve
+
+  Decision: Use LangGraph ONLY if:
+    - Routing logic >20 lines
+    - Need state persistence across steps
+    - Complex conditional branches
+
+COMPLEXITY:
+  - Lines of code: ~1200 (2.4x Phase 1)
+  - Conditional routing logic
+  - Multiple tools
+  - Screen-specific validation
+
+SUCCESS METRICS:
+  - Classification accuracy: >95%
+  - Extraction accuracy (per screen): >90%
+  - Latency: <4 seconds (1 extra VLM call for classification)
+  - Coverage: Works for 3+ screen types
+
+DEPLOYMENT:
+  - FastAPI scaled to 2-3 replicas
+  - vLLM with fine-tuned model for classification
+  - MLFlow tracking per screen type
+
+CHALLENGES:
+  - Classification errors → wrong tool called
+  - Different extraction schemas per screen
+  - More complex error handling
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    PHASE 3: MULTI-AGENT VALIDATION
+═══════════════════════════════════════════════════════════════════════════
+
+SCOPE:
+  - Validator agent for quality checks
+  - Self-correction via re-extraction
+  - Confidence scores
+  - Target: 95%+ accuracy
+
+ARCHITECTURE:
+
+  User Upload → FastAPI → VLMOrchestrator
+                              ↓
+                        Extractor Agent (Smolagents)
+                              ↓
+                    Extract data (as in Phase 2)
+                              ↓
+                        Validator Agent (Smolagents)
+                              ↓
+                "Validate extraction quality"
+                              ↓
+            ┌─────────────────┴─────────────────┐
+            │                                   │
+       Valid (>95%)                      Invalid (<95%)
+            │                                   │
+            ▼                                   ▼
+    Return result                   Re-extract with hints
+                                                │
+                                                ▼
+                                    Extractor Agent (retry)
+                                                │
+                                                ▼
+                                    Validator Agent (re-check)
+                                                │
+                                                ▼
+                                    Return (even if not perfect)
+
+AGENTS:
+
+  1. EXTRACTOR AGENT
+     Role: Extract data from screenshot
+     Tools: [classify_screen_type, crop_pierres_detail_panel, extract_tv_dialog, extract_inventory]
+     System prompt: "You extract data accurately from Stardew Valley screenshots."
+
+  2. VALIDATOR AGENT
+     Role: Validate extraction quality, identify issues
+     Tools: [validate_extraction, check_completeness, calculate_confidence]
+     System prompt: "You validate extractions and identify missing or incorrect fields."
+
+VALIDATION LOGIC:
+
+  class ValidateExtractionTool(Tool):
+      name = "validate_extraction"
+      description = "Check if extraction is complete and accurate"
+
+      def forward(self, extraction: dict, screen_type: str) -> dict:
+          schema = SCHEMAS[screen_type]  # Expected fields
+          missing = []
+          low_confidence = []
+
+          for field in schema["required"]:
+              if field not in extraction:
+                  missing.append(field)
+              elif is_low_confidence(extraction[field]):
+                  low_confidence.append(field)
+
+          is_valid = len(missing) == 0 and len(low_confidence) == 0
+          confidence = calculate_confidence(extraction, schema)
+
+          return {
+              "is_valid": is_valid,
+              "confidence": confidence,
+              "missing_fields": missing,
+              "low_confidence_fields": low_confidence,
+              "suggestions": generate_hints(missing, low_confidence)
+          }
+
+MULTI-AGENT ORCHESTRATION:
+
+  # Phase 3: Multi-agent pattern
+  extractor = CodeAgent(
+      tools=[ClassifyTool(), PierresTool(), TVTool(), InventoryTool()],
+      model=model,
+      system_prompt="Extract data accurately from screenshots."
+  )
+
+  validator = CodeAgent(
+      tools=[ValidateTool(), CheckCompletenessTool()],
+      model=model,
+      system_prompt="Validate extractions and identify issues."
+  )
+
+  # Main orchestrator
+  def analyze_with_validation(image_path: str) -> dict:
+      # Extract
+      extraction = extractor.run(f"Extract from {image_path}")
+
+      # Validate
+      validation = validator.run(
+          f"Validate this extraction: {json.dumps(extraction)}"
+      )
+
+      # Re-extract if needed
+      if not validation["is_valid"] and validation["confidence"] < 0.95:
+          hints = validation["suggestions"]
+          extraction = extractor.run(
+              f"Re-extract from {image_path}, focusing on: {hints}"
+          )
+
+          # Re-validate
+          validation = validator.run(
+              f"Validate this extraction: {json.dumps(extraction)}"
+          )
+
+      # Return with metadata
+      return {
+          "extraction": extraction,
+          "validation": validation,
+          "confidence": validation["confidence"]
+      }
+
+COMPLEXITY:
+  - Lines of code: ~2000 (1.7x Phase 2)
+  - Multi-agent coordination
+  - Retry logic
+  - Confidence scoring
+
+SUCCESS METRICS:
+  - Extraction accuracy: >95%
+  - Confidence calibration: <5% over/under-confident
+  - Retry rate: <20%
+  - Latency: <6 seconds (2 VLM calls + optional retry)
+
+DEPLOYMENT:
+  - FastAPI scaled to 3-5 replicas
+  - vLLM with 2 replicas (higher load)
+  - MLFlow tracking with validation metrics
+
+CHALLENGES:
+  - Increased latency (2x VLM calls minimum)
+  - Validator might be too strict (over-rejection)
+  - Retry loops (need max retry limit)
+  - Cost (2x VLM usage)
+
+WHEN TO IMPLEMENT:
+  ✅ Phase 2 extraction accuracy < 95%
+  ✅ User feedback indicates quality issues
+  ✅ Production usage at scale (justify cost)
+
+  ❌ Phase 2 accuracy already >95% (don't over-engineer!)
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    COMPLEXITY COMPARISON
+═══════════════════════════════════════════════════════════════════════════
+
+METRIC                PHASE 1     PHASE 2     PHASE 3
+──────────────────    ───────     ───────     ───────
+Lines of code         ~500        ~1200       ~2000
+Screen types          1           3+          3+
+Tools                 1           4+          6+
+VLM calls per req     1           2           2-4
+Latency (seconds)     <3          <4          <6
+Complexity level      LOW         MEDIUM      MEDIUM-HIGH
+Framework used        Smolagents  Smolagents  Smolagents
+                                  +(LangGraph?)  +Multi-agent
+Success metric        >90%        >90%        >95%
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    DECISION FRAMEWORK
+═══════════════════════════════════════════════════════════════════════════
+
+WHEN TO MOVE TO NEXT PHASE:
+
+Phase 1 → Phase 2:
+  ✅ Phase 1 deployed and stable
+  ✅ User requests for additional screen types
+  ✅ >90% accuracy on Pierre's shop
+  ✅ Team bandwidth to develop new tools
+
+  ❌ Phase 1 still has accuracy issues (<85%)
+  ❌ No user demand for multi-screen
+
+Phase 2 → Phase 3:
+  ✅ Phase 2 accuracy <95% despite efforts
+  ✅ Production usage at scale (>100 req/day)
+  ✅ Budget for 2x VLM compute
+  ✅ Clear quality improvement path
+
+  ❌ Phase 2 accuracy already >95%
+  ❌ Low production usage
+  ❌ Cost not justified
+
+WHEN TO ADD LANGGRAPH (Phase 2):
+
+  ✅ Routing logic >20 lines of if/else
+  ✅ Need state persistence across steps
+  ✅ Complex conditional branches
+  ✅ Want visual graph representation
+
+  ❌ Simple if/elif/else works fine
+  ❌ No state management needed
+  ❌ Adds complexity without benefit
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    IMPLEMENTATION ROADMAP
+═══════════════════════════════════════════════════════════════════════════
+
+WEEK 1-2: PHASE 1 DEVELOPMENT
+  Day 1-2:   Implement crop_pierres_detail_panel tool
+  Day 3-4:   VLMOrchestrator with Smolagents
+  Day 5-6:   FastAPI integration
+  Day 7-8:   MeloTTS integration
+  Day 9-10:  Testing and deployment
+
+WEEK 3-5: PHASE 2 DEVELOPMENT
+  Week 3:    Implement extract_tv_dialog tool
+  Week 4:    Implement extract_inventory tool
+             Implement classify_screen_type
+             Test classification accuracy
+  Week 5:    Routing logic (if/else or LangGraph)
+             Integration testing
+             Deployment
+
+WEEK 6-8: PHASE 3 DEVELOPMENT (if needed)
+  Week 6:    Implement validation tools
+             Validator agent
+  Week 7:    Multi-agent orchestration
+             Retry logic
+             Confidence scoring
+  Week 8:    Testing
+             Performance optimization
+             Deployment
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    KEY TAKEAWAYS
+═══════════════════════════════════════════════════════════════════════════
+
+1. START SIMPLE, ADD COMPLEXITY AS NEEDED
+   - Phase 1: Prove concept with minimal scope
+   - Phase 2: Add features when demand is clear
+   - Phase 3: Optimize quality when metrics justify it
+
+2. MEASURE BEFORE ADDING COMPLEXITY
+   - Don't add LangGraph if simple routing works
+   - Don't add validation if accuracy already >95%
+   - Let metrics drive decisions
+
+3. EACH PHASE DOUBLES COMPLEXITY
+   - Phase 1: ~500 LOC
+   - Phase 2: ~1200 LOC (2.4x)
+   - Phase 3: ~2000 LOC (1.7x)
+   - Total: 4x complexity from Phase 1 to Phase 3
+
+4. INCREMENTAL DEPLOYMENT
+   - Deploy Phase 1, get feedback
+   - Deploy Phase 2, measure impact
+   - Deploy Phase 3 only if needed
+
+5. FRAMEWORK MINIMALISM
+   - Phase 1: Just Smolagents
+   - Phase 2: Smolagents + maybe LangGraph
+   - Phase 3: Smolagents + multi-agent
+   - Don't over-engineer!
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        RELATED DIAGRAMS
+═══════════════════════════════════════════════════════════════════════════
+
+- tool-calling-flow.txt        - Basic flow (used in all phases)
+- codeagent-execution.txt      - How CodeAgent works (Phases 1-3)
+- vllm-architecture.txt        - vLLM serving (Phases 1-3)
+- production-pipeline.txt      - Production deployment (Phase 1, extended in 2-3)
+- fastapi-integration.txt      - Web layer (Phases 1-3)

@@ -1,0 +1,438 @@
+vLLM ARCHITECTURE
+=================
+
+How vLLM serves VLMs with optimized inference.
+
+═══════════════════════════════════════════════════════════════════════════
+                        VLLM SERVER ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          VLLM SERVER PROCESS                             │
+│                       (port 8001, OpenAI-compatible)                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+CLIENT REQUESTS                    VLLM COMPONENTS
+┌──────────────┐                  ┌─────────────────────────────────────┐
+│              │  HTTP POST       │                                     │
+│  FastAPI     │  /v1/chat/       │  HTTP Server (Uvicorn)              │
+│  App         │  completions     │  - Parse request                    │
+│              │─────────────────>│  - Validate schema                  │
+│              │                  │  - Enqueue request                  │
+└──────────────┘                  └──────────┬──────────────────────────┘
+                                             │
+┌──────────────┐                             ▼
+│              │                  ┌─────────────────────────────────────┐
+│  Smolagents  │                  │  Request Queue                      │
+│  LiteLLMModel│                  │  - FIFO or priority                 │
+│              │                  │  - Batching logic                   │
+│              │                  │  - Waiting requests                 │
+└──────────────┘                  └──────────┬──────────────────────────┘
+                                             │
+┌──────────────┐                             ▼
+│              │                  ┌─────────────────────────────────────┐
+│  curl / CLI  │                  │  vLLM Engine                        │
+│              │                  │  ┌───────────────────────────────┐  │
+│              │                  │  │ PagedAttention                │  │
+└──────────────┘                  │  │ - Efficient memory management │  │
+                                  │  │ - KV cache blocks             │  │
+                                  │  │ - 2-4x throughput vs naive   │  │
+                                  │  └───────────────────────────────┘  │
+                                  │                                     │
+                                  │  ┌───────────────────────────────┐  │
+                                  │  │ Continuous Batching           │  │
+                                  │  │ - Process multiple requests   │  │
+                                  │  │ - Dynamic batch sizes         │  │
+                                  │  │ - Maximize GPU utilization    │  │
+                                  │  └───────────────────────────────┘  │
+                                  │                                     │
+                                  │  ┌───────────────────────────────┐  │
+                                  │  │ Speculative Decoding          │  │
+                                  │  │ - Draft model (optional)      │  │
+                                  │  │ - Verify with main model      │  │
+                                  │  │ - Faster generation           │  │
+                                  │  └───────────────────────────────┘  │
+                                  └──────────┬──────────────────────────┘
+                                             │
+                                             ▼
+                                  ┌─────────────────────────────────────┐
+                                  │  Model Executor                     │
+                                  │  - Load model weights               │
+                                  │  - Tokenizer                        │
+                                  │  - Forward pass                     │
+                                  │  - Sampling (temperature, top_p)    │
+                                  └──────────┬──────────────────────────┘
+                                             │
+                                             ▼
+                                  ┌─────────────────────────────────────┐
+                                  │  GPU (ROCm 7.2 / CUDA)              │
+                                  │  ┌───────────────────────────────┐  │
+                                  │  │ Qwen2.5-VL-7B-Instruct        │  │
+                                  │  │ - Vision encoder              │  │
+                                  │  │ - Language model              │  │
+                                  │  │ - Loaded in FP16              │  │
+                                  │  └───────────────────────────────┘  │
+                                  └─────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        REQUEST FLOW (DETAILED)
+═══════════════════════════════════════════════════════════════════════════
+
+1. CLIENT SENDS REQUEST
+   ────────────────────
+   POST http://localhost:8001/v1/chat/completions
+   {
+     "model": "Qwen2.5-VL-7B-Instruct",
+     "messages": [...],
+     "tools": [...],
+     "temperature": 0.7,
+     "max_tokens": 500
+   }
+
+2. HTTP SERVER VALIDATES
+   ─────────────────────
+   - Check model exists
+   - Validate JSON schema
+   - Check required fields
+   - Enqueue request
+
+3. REQUEST QUEUE
+   ─────────────
+   Waiting requests: [Request A, Request B, Request C]
+   Engine pulls batch: [Request A, Request B]  ← Dynamic batching!
+
+4. VLLM ENGINE PROCESSES BATCH
+   ───────────────────────────
+   PagedAttention:
+     Request A: Needs 256 KV cache blocks
+     Request B: Needs 128 KV cache blocks
+     Allocate blocks efficiently (no fragmentation)
+
+   Tokenization:
+     Request A: [1, 234, 567, ...]  (prompt tokens)
+     Request B: [1, 890, 123, ...]
+
+5. MODEL EXECUTOR RUNS
+   ───────────────────
+   Forward pass on GPU:
+     - Vision encoder processes image (if present)
+     - Language model processes tokens
+     - Returns logits
+
+   Sampling:
+     - Apply temperature
+     - Apply top_p/top_k
+     - Sample next token
+
+   Repeat until:
+     - max_tokens reached
+     - <EOS> token generated
+     - Stop sequence matched
+
+6. RESPONSE FORMATTING
+   ───────────────────
+   Generated tokens: [7890, 1234, 5678, ..., <EOS>]
+   Decode: "Here's the extracted data..."
+
+   Format as OpenAI response:
+   {
+     "id": "chatcmpl-abc123",
+     "object": "chat.completion",
+     "choices": [{
+       "message": {
+         "role": "assistant",
+         "content": "Here's the extracted data...",
+         "tool_calls": [...]
+       }
+     }]
+   }
+
+7. CLIENT RECEIVES RESPONSE
+   ────────────────────────
+   HTTP 200 OK
+   {JSON response}
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        PAGEDATTENTION EXPLAINED
+═══════════════════════════════════════════════════════════════════════════
+
+NAIVE ATTENTION (Transformers):
+  - Allocates contiguous memory for KV cache
+  - Wastes memory due to fragmentation
+  - Can't batch efficiently
+
+  Request A: [████████████████                ]  Allocated: 100 tokens
+  Request B: [████████                        ]  Allocated: 100 tokens
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^  Wasted!
+
+PAGEDATTENTION (vLLM):
+  - Allocates memory in blocks (like OS virtual memory)
+  - No fragmentation
+  - Can batch requests of different lengths
+
+  Block Pool: [█][█][█][█][█][█][█][█][█][█]
+               ↑           ↑
+  Request A: Uses 4 blocks
+  Request B: Uses 2 blocks
+  Request C: Uses 3 blocks
+  Total: 9 blocks used, 1 free (90% utilization!)
+
+PERFORMANCE GAIN: 2-4x higher throughput
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        CONTINUOUS BATCHING
+═══════════════════════════════════════════════════════════════════════════
+
+STATIC BATCHING (Naive):
+  Batch 1: [Request A, Request B]
+  Wait for both to complete (slowest request determines latency)
+
+  Request A: ████████ (8 tokens, done)
+  Request B: ████████████████████ (20 tokens)
+               ↑ A waits here even though it's done!
+
+  Batch 2: [Request C, Request D] ← Can't start until Batch 1 done
+
+CONTINUOUS BATCHING (vLLM):
+  When Request A finishes, immediately add Request C to batch
+
+  Step 1-8:  [Request A, Request B]
+  Step 9-20: [Request B, Request C] ← A replaced by C!
+  Step 21-30:[Request B, Request C, Request D]
+
+  No waiting! GPU always at max utilization.
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        OPENAI API COMPATIBILITY
+═══════════════════════════════════════════════════════════════════════════
+
+VLLM IMPLEMENTS:
+
+✅ POST /v1/chat/completions
+   - Main endpoint for chat models
+   - Supports tools/function calling
+   - Streaming support
+
+✅ POST /v1/completions
+   - Legacy completion endpoint
+   - For non-chat models
+
+✅ GET /v1/models
+   - List available models
+
+✅ POST /v1/embeddings
+   - Generate embeddings (if model supports)
+
+✅ GET /health
+   - Health check for load balancers
+
+SAME REQUEST FORMAT AS OPENAI:
+  {
+    "model": "Qwen2.5-VL-7B-Instruct",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant"},
+      {"role": "user", "content": "Extract from screenshot"}
+    ],
+    "tools": [{...}],
+    "temperature": 0.7,
+    "max_tokens": 500
+  }
+
+SAME RESPONSE FORMAT AS OPENAI:
+  {
+    "id": "chatcmpl-...",
+    "object": "chat.completion",
+    "created": 1234567890,
+    "model": "Qwen2.5-VL-7B-Instruct",
+    "choices": [{
+      "index": 0,
+      "message": {...},
+      "finish_reason": "stop"
+    }],
+    "usage": {
+      "prompt_tokens": 123,
+      "completion_tokens": 456,
+      "total_tokens": 579
+    }
+  }
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        CONFIGURATION OPTIONS
+═══════════════════════════════════════════════════════════════════════════
+
+vllm serve MODEL_PATH [OPTIONS]
+
+COMMON OPTIONS:
+
+--port 8001
+  HTTP server port
+
+--dtype float16
+  Model precision (float16, bfloat16, float32)
+  ⚠️ ROCm 7.2 only supports float16!
+
+--enable-tool-calling
+  Enable function calling support
+
+--max-model-len 4096
+  Maximum context length (saves GPU memory)
+
+--gpu-memory-utilization 0.9
+  GPU memory to allocate (0.0-1.0)
+
+--max-num-seqs 256
+  Maximum number of sequences in batch
+
+--tensor-parallel-size 1
+  Number of GPUs for tensor parallelism
+
+--trust-remote-code
+  Allow model code from HuggingFace (required for some models)
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        DEPLOYMENT PATTERNS
+═══════════════════════════════════════════════════════════════════════════
+
+DEVELOPMENT (Local):
+  vllm serve models/base/Qwen2.5-VL-7B-Instruct \
+    --port 8001 --dtype float16
+
+PRODUCTION (OpenShift AI via KServe):
+  apiVersion: serving.kserve.io/v1beta1
+  kind: InferenceService
+  metadata:
+    name: stardew-vision-vlm
+  spec:
+    predictor:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - --model=Qwen2.5-VL-7B-Instruct
+            - --dtype=float16
+            - --enable-tool-calling
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+
+SAME CLIENT CODE:
+  # Development
+  model = LiteLLMModel(
+      base_url="http://localhost:8001/v1",
+      api_key="EMPTY"
+  )
+
+  # Production
+  model = LiteLLMModel(
+      base_url="https://stardew-vision-vlm.apps.cluster.com/v1",
+      api_key=os.getenv("KSERVE_TOKEN")
+  )
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        PERFORMANCE METRICS
+═══════════════════════════════════════════════════════════════════════════
+
+THROUGHPUT:
+  Requests/second: Depends on:
+    - Request batch size
+    - Sequence length
+    - Model size
+    - GPU memory
+
+  Example (Qwen2.5-VL-7B on AMD Strix Halo):
+    Single request: ~10 tokens/second
+    Batch of 4: ~35 tokens/second (3.5x throughput!)
+
+LATENCY:
+  Time to first token (TTFT):
+    - Prefill phase (process prompt)
+    - ~200-500ms for typical prompt
+
+  Time per output token (TPOT):
+    - Decode phase (generate tokens)
+    - ~100ms per token
+
+  Total latency = TTFT + (num_tokens × TPOT)
+  Example: 500ms + (20 tokens × 100ms) = 2.5 seconds
+
+MEMORY:
+  GPU memory usage:
+    - Model weights: ~14 GB (FP16 for 7B model)
+    - KV cache: ~2 GB per 1000 tokens
+    - Activation memory: ~2 GB
+
+  Total for Qwen2.5-VL-7B: ~18-20 GB
+  Fits on: AMD Strix Halo (16 GB shared), NVIDIA A100 (40 GB)
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        MONITORING AND DEBUGGING
+═══════════════════════════════════════════════════════════════════════════
+
+VLLM LOGS:
+  INFO: Avg prompt throughput: 123.4 tokens/s
+  INFO: Avg generation throughput: 234.5 tokens/s
+  INFO: Running: 2 reqs, Waiting: 0 reqs, KV cache usage: 45.2%
+
+PROMETHEUS METRICS (exposed on port 8001/metrics):
+  - vllm_request_success_total
+  - vllm_request_duration_seconds
+  - vllm_num_requests_running
+  - vllm_num_requests_waiting
+  - vllm_gpu_cache_usage_perc
+
+DEBUGGING:
+  Enable verbose logging:
+    vllm serve ... --log-level DEBUG
+
+  Check GPU utilization:
+    rocm-smi  # For ROCm
+    nvidia-smi  # For CUDA
+
+  Test health:
+    curl http://localhost:8001/health
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        KEY TAKEAWAYS
+═══════════════════════════════════════════════════════════════════════════
+
+1. VLLM IS OPTIMIZED FOR SERVING
+   - PagedAttention: Efficient memory
+   - Continuous batching: High throughput
+   - OpenAI compatibility: Easy integration
+
+2. SAME API AS OPENAI
+   - Switch from OpenAI to vLLM: change base_url only
+   - Switch from local to production: change base_url only
+
+3. PRODUCTION-READY
+   - Prometheus metrics
+   - Health checks
+   - Kubernetes/OpenShift compatible
+
+4. PERFORMANCE GAINS
+   - 2-4x throughput vs naive transformers
+   - Concurrent request handling
+   - Efficient GPU utilization
+
+5. CONFIGURATION IS KEY
+   - Choose right dtype (FP16 for ROCm 7.2)
+   - Set max-model-len appropriately
+   - Enable tool calling for function calling
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        RELATED DIAGRAMS
+═══════════════════════════════════════════════════════════════════════════
+
+- tool-calling-flow.txt        - How tool calling works end-to-end
+- production-pipeline.txt      - Full production architecture
+- fastapi-integration.txt      - FastAPI ↔ vLLM integration

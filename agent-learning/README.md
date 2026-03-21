@@ -24,6 +24,22 @@ This directory contains a progressive learning curriculum for agent/tool-calling
 agent-learning/
 ├── README.md                          # This file - navigation and overview
 ├── curriculum.md                      # Full learning curriculum (6 modules)
+├── GETTING_STARTED.md                 # Quick start guide
+├── modules/                           # 📚 DETAILED LEARNING MATERIALS
+│   ├── README.md                      # Navigation guide for modules
+│   ├── module1-manual-dispatch.md     # Complete guide with diagrams
+│   ├── module2-smolagents-basics.md   # Step-by-step walkthrough
+│   ├── module3-vllm-integration.md    # vLLM setup and integration
+│   ├── module4-production-wrapper.md  # Error handling and testing
+│   ├── module5-fastapi-integration.md # Web API integration
+│   └── module6-conference-demos.md    # Advanced topics and demos
+├── diagrams/                          # 📊 ASCII DIAGRAMS
+│   ├── tool-calling-flow.txt          # Complete end-to-end flow
+│   ├── codeagent-execution.txt        # How CodeAgent works
+│   ├── vllm-architecture.txt          # vLLM serving architecture
+│   ├── production-pipeline.txt        # Full production flow
+│   ├── fastapi-integration.txt        # Web request flow
+│   └── phase-progression.txt          # Phase 1 → 2 → 3 evolution
 ├── docs/
 │   ├── smolagents-quickstart.md      # Quick reference for Smolagents
 │   ├── best-practices-2026.md        # 2026 agentic workflow patterns
@@ -46,39 +62,64 @@ agent-learning/
 
 ## Modules
 
+**📚 For detailed guides with diagrams and code walkthroughs, see [`modules/`](modules/)**
+
 ### Module 1: Manual Tool Dispatch (1-2 hours)
+→ **[Complete guide](modules/module1-manual-dispatch.md)** | [Example code](examples/module1_manual_dispatch.py) | [Exercise](exercises/exercise1_tool_creation.md)
+
 - Understand OpenAI function-calling format
 - Create tool definitions manually
 - Build tool registry and dispatcher
 - **No framework** - just Python functions
 
 ### Module 2: Smolagents Basics (2-3 hours)
+→ **[Complete guide](modules/module2-smolagents-basics.md)** | [Example code](examples/module2_smolagents_basic.py) | [Exercise](exercises/exercise2_agent_config.md)
+
 - Install Smolagents
 - Create custom Tool class
 - CodeAgent vs ToolCallingAgent
 - First agent with Qwen2.5-VL
 
 ### Module 3: Smolagents + vLLM (2-3 hours)
+→ **[Complete guide](modules/module3-vllm-integration.md)** | [Example code](examples/module3_smolagents_vllm.py) | [Exercise](exercises/exercise3_debugging.md)
+
 - LiteLLMModel backend for vLLM
 - Tool calling via vLLM endpoint
 - Debugging and logging
 
 ### Module 4: Production Wrapper (2-3 hours)
+→ **[Complete guide](modules/module4-production-wrapper.md)** | [Example code](examples/module4_production_wrapper.py)
+
 - VLMOrchestrator using Smolagents
 - Error handling and validation
 - MLFlow integration
 - Testing strategies
 
 ### Module 5: FastAPI Integration (1-2 hours)
+→ **[Complete guide](modules/module5-fastapi-integration.md)** | [Example code](examples/module5_fastapi_integration.py)
+
 - Connect orchestrator to web app
 - File upload handling
 - Async patterns
 
 ### Module 6: Advanced & Alternatives (1-2 hours)
+→ **[Complete guide](modules/module6-conference-demos.md)** | [Example code](examples/module6_conference_demo.py)
+
 - When to use raw client instead
 - When to add LangGraph (Phase 2+)
 - Conference demo scripts
 - Hub tool sharing
+
+## Diagrams
+
+**📊 Visual explanations with ASCII art in [`diagrams/`](diagrams/)**
+
+- [`tool-calling-flow.txt`](diagrams/tool-calling-flow.txt) - Complete 7-phase flow from user to result
+- [`codeagent-execution.txt`](diagrams/codeagent-execution.txt) - How Smolagents CodeAgent generates and executes Python code
+- [`vllm-architecture.txt`](diagrams/vllm-architecture.txt) - vLLM internals: PagedAttention, batching, serving
+- [`production-pipeline.txt`](diagrams/production-pipeline.txt) - Full production flow with error handling and observability
+- [`fastapi-integration.txt`](diagrams/fastapi-integration.txt) - Web request flow from upload to response
+- [`phase-progression.txt`](diagrams/phase-progression.txt) - How the project evolves: Phase 1 MVP → Phase 2 Multi-screen → Phase 3 Multi-agent
 
 ## Prerequisites
 

@@ -1,0 +1,410 @@
+PRODUCTION PIPELINE
+===================
+
+Complete production architecture with error handling, logging, and observability.
+
+═══════════════════════════════════════════════════════════════════════════
+                    COMPLETE PRODUCTION FLOW
+═══════════════════════════════════════════════════════════════════════════
+
+USER                FASTAPI              ORCHESTRATOR           SMOLAGENTS          TOOLS
+┌─────┐            ┌─────────┐          ┌──────────────┐      ┌─────────┐       ┌──────┐
+│     │            │         │          │              │      │         │       │      │
+│Upload│  POST     │ Health  │          │  Validate    │      │ Code    │       │Pierre│
+│ PNG  │─────────> │ Check   │          │  Input       │      │ Agent   │       │Panel │
+│     │            │         │          │              │      │         │       │ Tool │
+│     │            │ ┌─────┐ │          │  Start       │      │         │       │      │
+│     │            │ │Route│ │          │  MLFlow      │      │  Gen    │       │OpenCV│
+│     │            │ │/api │ │          │  Run         │      │  Code   │       │ +    │
+│     │            │ │/v1/ │ │          │              │      │         │       │Paddle│
+│     │            │ │ana  │ │          │  Try:        │      │  Exec   │       │ OCR  │
+│     │            │ │lyze │ │ analyze_ │    agent.run │  run │  in     │forward│      │
+│     │            │ └──┬──┘ │ screen   │              │─────>│  Sand   │──────>│Crop &│
+│     │            │    │    │ shot()   │  Catch:      │      │  box    │       │Extract│
+│     │            │    │    │───────────>    Log error│      │         │       │      │
+│     │            │    │    │          │    MLFlow    │      │  Return │<──────│Return│
+│     │            │    │    │          │    Re-raise  │      │  result │  dict │ dict │
+│     │            │    │    │<───────────              │<─────│         │       │      │
+│     │            │    │    │  result  │  End MLFlow  │      │         │       │      │
+│     │<───────────────┴────┘          │  Run         │      │         │       │      │
+│     │  HTTP 200 {"success": true...} │              │      │         │       │      │
+└─────┘            └─────────┘          └──────────────┘      └─────────┘       └──────┘
+
+                   LOGGING LAYER                        MLFLOW TRACKING
+                   ┌──────────────┐                    ┌───────────────┐
+                   │ logger.info()│                    │ Parameters    │
+                   │ logger.error()│                   │ - image_path  │
+                   └──────────────┘                    │ - model_id    │
+                                                       │ - use_vllm    │
+                                                       │               │
+                                                       │ Metrics       │
+                                                       │ - success: 1/0│
+                                                       │ - latency_s   │
+                                                       │               │
+                                                       │ Artifacts     │
+                                                       │ - result.json │
+                                                       └───────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    ERROR HANDLING FLOW
+═══════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       ERROR HANDLING LAYERS                              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+LAYER 1: INPUT VALIDATION (FastAPI)
+────────────────────────────────────
+User uploads text file
+  │
+  ├─> FastAPI validates content-type
+  │   └─> if not image/*:
+  │       └─> HTTPException(400, "Invalid file type")
+  │           └─> User sees: {"detail": "Invalid file type..."}
+  │
+  └─> Early exit, no processing
+
+LAYER 2: FILE VALIDATION (Orchestrator)
+────────────────────────────────────────
+FastAPI calls orchestrator.analyze_screenshot("/nonexistent.png")
+  │
+  ├─> Orchestrator checks Path(image_path).exists()
+  │   └─> if not exists:
+  │       └─> FileNotFoundError("Image not found: /nonexistent.png")
+  │           └─> FastAPI catches, returns HTTP 500
+  │           └─> MLFlow logs: success=0, error="Image not found"
+  │
+  └─> Early exit, no VLM call
+
+LAYER 3: VLM ERRORS (Orchestrator)
+───────────────────────────────────
+VLM call fails (timeout, connection refused, etc.)
+  │
+  ├─> agent.run() raises Exception
+  │   └─> Orchestrator catches in try/except
+  │       ├─> logger.error("Analysis failed: {e}")
+  │       ├─> MLFlow logs: success=0, error=str(e)
+  │       └─> raise ValueError("VLM analysis failed: {e}")
+  │           └─> FastAPI catches, returns HTTP 500
+  │
+  └─> User sees clear error message
+
+LAYER 4: TOOL ERRORS (Tool.forward)
+────────────────────────────────────
+Tool execution fails (OpenCV error, OCR failure, etc.)
+  │
+  ├─> Tool.forward() raises Exception
+  │   ├─> Tool logs: logger.error("Tool execution failed: {e}")
+  │   └─> Re-raise to agent
+  │       └─> Agent propagates to orchestrator
+  │           └─> Orchestrator catches (Layer 3)
+  │               └─> MLFlow logs error
+  │
+  └─> Comprehensive error context
+
+LAYER 5: CLEANUP (FastAPI - finally block)
+───────────────────────────────────────────
+Always runs, even if error occurred
+  │
+  └─> finally:
+      └─> Path(tmp_path).unlink(missing_ok=True)
+          └─> Temp file deleted regardless of success/failure
+          └─> Prevents disk space leaks
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    SUCCESS PATH WITH OBSERVABILITY
+═══════════════════════════════════════════════════════════════════════════
+
+TIME    COMPONENT       ACTION                          LOGGING/TRACKING
+────    ─────────       ──────                          ────────────────
+0.0s    FastAPI         Receive upload                  logger.info("Received upload: pierre_shop_001.png")
+        │               Validate content-type           ✓ image/png
+        │               Save to temp: /tmp/xyz.png
+        │
+0.1s    Orchestrator    analyze_screenshot()            logger.info("Analyzing screenshot: /tmp/xyz.png")
+        │               Validate file exists            ✓ exists
+        │               Start MLFlow run                mlflow.start_run()
+        │                                               mlflow.log_param("image_path", "/tmp/xyz.png")
+        │                                               mlflow.log_param("model_id", "Qwen2.5-VL-7B-Instruct")
+        │                                               mlflow.log_param("use_vllm", True)
+        │               Start timer                     start_time = time.time()
+        │
+0.1s    CodeAgent       agent.run()                     [Agent logs step 1/3]
+        │               Generate Python code            [VLM] Generating code...
+        │                                               [Agent] Executing:
+        │                                                 result = crop_pierres_detail_panel(...)
+        │
+0.5s    Tool            forward()                       logger.info("Executing crop_pierres_detail_panel on /tmp/xyz.png")
+        │               Load image (OpenCV)
+        │               Find panel (template match)
+        │               Extract text (PaddleOCR)
+        │               Parse fields
+        │               Return dict                     logger.info("Extraction successful: {...}")
+        │
+1.8s    CodeAgent       Return result                   [Agent] Step 1 complete
+        │
+1.8s    Orchestrator    Receive result                  logger.info("Analysis successful")
+        │               Calculate latency               latency = 1.8 - 0.1 = 1.7s
+        │               Log to MLFlow                   mlflow.log_dict(result, "extraction_result.json")
+        │                                               mlflow.log_metric("success", 1)
+        │                                               mlflow.log_metric("latency_seconds", 1.7)
+        │               End MLFlow run                  mlflow.end_run()
+        │               Return result
+        │
+1.8s    FastAPI         Format response                 return JSONResponse({
+        │                                                 "success": True,
+        │                                                 "filename": "pierre_shop_001.png",
+        │                                                 "extraction": {...}
+        │                                               })
+        │               Cleanup temp file               Path("/tmp/xyz.png").unlink()
+        │               Return to user                  HTTP 200
+        │
+2.0s    USER            Receive JSON                    {"success": true, "extraction": {...}}
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    MLFLOW DASHBOARD VIEW
+═══════════════════════════════════════════════════════════════════════════
+
+RUN ID: a1b2c3d4e5f6...
+────────────────────────────────────────────────────────────────────────────
+
+PARAMETERS:
+  image_path:       /tmp/xyz.png
+  model_id:         Qwen2.5-VL-7B-Instruct
+  use_vllm:         true
+
+METRICS:
+  success:          1
+  latency_seconds:  1.7
+
+ARTIFACTS:
+  extraction_result.json:
+    {
+      "name": "Parsnip",
+      "description": "A spring vegetable. Still loved by many.",
+      "price_per_unit": 20,
+      "quantity_selected": 5,
+      "total_cost": 100
+    }
+
+METADATA:
+  Start time:       2026-03-20 10:00:00
+  End time:         2026-03-20 10:00:02
+  Duration:         2.0s
+  Status:           FINISHED
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    PRODUCTION DEPLOYMENT ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         OPENSHIFT AI CLUSTER                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────────────────────────┐
+  │                        NAMESPACE: stardew-vision                    │
+  └────────────────────────────────────────────────────────────────────┘
+
+  ┌──────────────────────┐        ┌──────────────────────┐
+  │  FastAPI Deployment  │        │  vLLM InferenceService│
+  │  (3 replicas)        │        │  (KServe)            │
+  │                      │        │                      │
+  │  - Port: 8000        │  HTTP  │  - Port: 8001        │
+  │  - Health: /health   │───────>│  - Model: Qwen2.5-VL │
+  │  - Routes: /analyze  │        │  - GPU: 1 × A100     │
+  │  - Auto-scale: 1-10  │        │  - Auto-scale: 1-3   │
+  └──────────┬───────────┘        └──────────────────────┘
+             │
+             │ Ingress
+             ▼
+  ┌──────────────────────┐
+  │  Route (HTTPS)       │
+  │  stardew-vision.apps.│
+  │  cluster.com         │
+  └──────────────────────┘
+             │
+             │ Public Internet
+             ▼
+  ┌──────────────────────┐
+  │  Users               │
+  │  - Web browser       │
+  │  - Mobile app        │
+  │  - API clients       │
+  └──────────────────────┘
+
+
+  STORAGE:
+  ┌──────────────────────┐        ┌──────────────────────┐
+  │  MLFlow PVC          │        │  Model Storage PVC   │
+  │  - mlruns/           │        │  - Qwen2.5-VL-7B     │
+  │  - Experiment data   │        │  - Fine-tuned LoRA   │
+  │  - Metrics           │        │  - 20 GB             │
+  │  - Artifacts         │        │                      │
+  └──────────────────────┘        └──────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    MONITORING AND ALERTING
+═══════════════════════════════════════════════════════════════════════════
+
+PROMETHEUS METRICS (scraped every 30s):
+
+FastAPI Metrics:
+  - http_requests_total{endpoint="/analyze", status="200"}
+  - http_requests_total{endpoint="/analyze", status="500"}
+  - http_request_duration_seconds{endpoint="/analyze"}
+  - http_requests_in_progress
+
+vLLM Metrics:
+  - vllm_request_success_total
+  - vllm_request_duration_seconds
+  - vllm_gpu_cache_usage_perc
+  - vllm_num_requests_running
+  - vllm_num_requests_waiting
+
+MLFlow Metrics (custom):
+  - extraction_success_rate_5m (% successful extractions in last 5 min)
+  - extraction_latency_p95 (95th percentile latency)
+  - vllm_availability (1 if vLLM responding, 0 if down)
+
+GRAFANA DASHBOARDS:
+
+Dashboard: Stardew Vision Overview
+  - Request rate (requests/min)
+  - Success rate (%)
+  - p50, p95, p99 latency
+  - vLLM GPU utilization
+  - Error rate by type
+
+ALERTS:
+
+Alert: HighErrorRate
+  expr: rate(http_requests_total{status="500"}[5m]) > 0.05
+  for: 5m
+  action: Page on-call engineer
+
+Alert: HighLatency
+  expr: http_request_duration_seconds_p95 > 5.0
+  for: 10m
+  action: Slack notification
+
+Alert: VLLMDown
+  expr: vllm_availability == 0
+  for: 1m
+  action: Page on-call engineer, auto-restart
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    SCALING STRATEGY
+═══════════════════════════════════════════════════════════════════════════
+
+FASTAPI PODS (CPU-bound):
+  - HorizontalPodAutoscaler
+  - Scale on: CPU utilization > 70% or requests/pod > 50
+  - Min replicas: 1
+  - Max replicas: 10
+  - Scale-up: Add 1 pod every 30s
+  - Scale-down: Remove 1 pod every 5min
+
+VLLM PODS (GPU-bound):
+  - Manual scaling (GPU resources expensive)
+  - Scale on: GPU utilization > 80% or request queue > 10
+  - Min replicas: 1
+  - Max replicas: 3 (limited by GPU availability)
+
+SCALING EXAMPLE:
+
+Traffic spike: 10 req/s → 100 req/s
+
+  FastAPI:
+    0min:  3 pods handle 10 req/s (low CPU ~30%)
+    1min:  Traffic increases, CPU → 80%
+    2min:  HPA adds 2 more pods (now 5 pods)
+    3min:  CPU drops to 50%, stable
+    10min: Traffic drops to 20 req/s
+    15min: HPA removes 1 pod (now 4 pods)
+    20min: Removes another (now 3 pods)
+
+  vLLM:
+    - 1 pod handles all traffic (GPU efficient with batching)
+    - Queue builds up if >30 concurrent requests
+    - Manual intervention to add pod if sustained high load
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    DISASTER RECOVERY
+═══════════════════════════════════════════════════════════════════════════
+
+BACKUP STRATEGY:
+
+Daily:
+  - MLFlow data (mlruns/) → S3
+  - Model checkpoints → S3
+  - Application config → Git
+
+Weekly:
+  - Full database backup (if using DB for feature store)
+
+RECOVERY TIME OBJECTIVES (RTO):
+
+Component failure:
+  - FastAPI pod crash: <30s (K8s auto-restart)
+  - vLLM pod crash: <2min (model load time)
+  - vLLM server hung: <5min (health check + restart)
+
+Data loss:
+  - MLFlow data: <24h (restore from daily backup)
+  - Model weights: <1h (re-download from HuggingFace or S3)
+
+Complete cluster failure:
+  - RTO: <4h (provision new cluster, deploy from Git, restore data)
+  - RPO: <24h (daily backups)
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    KEY TAKEAWAYS
+═══════════════════════════════════════════════════════════════════════════
+
+1. ERROR HANDLING IS MULTI-LAYERED
+   - Input validation (FastAPI)
+   - Business logic validation (Orchestrator)
+   - Tool execution errors (Tools)
+   - Always cleanup resources (finally blocks)
+
+2. OBSERVABILITY IS ESSENTIAL
+   - Logging: Structured logs with context
+   - Metrics: Success rate, latency, throughput
+   - Tracing: MLFlow for experiment tracking
+   - Alerting: Proactive issue detection
+
+3. PRODUCTION DEPLOYMENT IS DIFFERENT
+   - Multiple replicas for high availability
+   - Auto-scaling based on load
+   - Health checks for self-healing
+   - Monitoring and alerting
+
+4. SEPARATION OF CONCERNS
+   - FastAPI: Web layer (HTTP, file upload)
+   - Orchestrator: Business logic (validation, orchestration)
+   - Smolagents: Agent framework (tool dispatch)
+   - Tools: Domain logic (extraction)
+
+5. FAIL FAST, LOG EVERYTHING
+   - Validate early (don't waste VLM time)
+   - Log errors with context
+   - Return clear error messages
+   - Track everything in MLFlow
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        RELATED DIAGRAMS
+═══════════════════════════════════════════════════════════════════════════
+
+- tool-calling-flow.txt        - Basic tool calling flow
+- codeagent-execution.txt      - How CodeAgent works
+- vllm-architecture.txt        - vLLM internals
+- fastapi-integration.txt      - FastAPI ↔ Orchestrator integration

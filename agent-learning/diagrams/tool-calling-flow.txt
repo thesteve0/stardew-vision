@@ -1,0 +1,230 @@
+TOOL CALLING FLOW
+=================
+
+Complete end-to-end flow from user prompt to extracted data.
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         PHASE 1: SETUP                                    │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Developer creates tool definitions:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │ TOOL_DEFINITIONS = [                                        │
+    │   {                                                         │
+    │     "type": "function",                                     │
+    │     "function": {                                           │
+    │       "name": "crop_pierres_detail_panel",                  │
+    │       "description": "Extract item details from Pierre's...",│
+    │       "parameters": {                                       │
+    │         "type": "object",                                   │
+    │         "properties": {                                     │
+    │           "image_path": {"type": "string", ...}             │
+    │         },                                                  │
+    │         "required": ["image_path"]                          │
+    │       }                                                     │
+    │     }                                                       │
+    │   }                                                         │
+    │ ]                                                           │
+    └─────────────────────────────────────────────────────────────┘
+
+Developer creates tool registry:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │ TOOL_REGISTRY = {                                           │
+    │   "crop_pierres_detail_panel": actual_function,             │
+    │ }                                                           │
+    └─────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 2: VLM RECEIVES CONTEXT                          │
+└──────────────────────────────────────────────────────────────────────────┘
+
+VLM receives:
+  1. User prompt: "Extract item info from screenshot"
+  2. Screenshot image: pierre_shop_001.png
+  3. Available tools: TOOL_DEFINITIONS (JSON)
+
+    ┌────────────────────────────────────────────────────────┐
+    │  VLM (Qwen2.5-VL-7B-Instruct)                          │
+    │                                                        │
+    │  Input:                                                │
+    │   - Prompt: "Extract from screenshot"                  │
+    │   - Image: [visual data]                               │
+    │   - Tools: [JSON definitions]                          │
+    │                                                        │
+    │  Analysis:                                             │
+    │   - "This is Pierre's shop"                            │
+    │   - "User wants extraction"                            │
+    │   - "I should use crop_pierres_detail_panel tool"      │
+    └────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 3: VLM RETURNS TOOL CALL                         │
+└──────────────────────────────────────────────────────────────────────────┘
+
+VLM generates tool call in OpenAI format:
+
+    ┌────────────────────────────────────────────────────────┐
+    │ {                                                      │
+    │   "tool_call": {                                       │
+    │     "id": "call_abc123",                               │
+    │     "type": "function",                                │
+    │     "function": {                                      │
+    │       "name": "crop_pierres_detail_panel",             │
+    │       "arguments": "{\"image_path\": \"screenshot.png\"}"│
+    │     }                                                  │
+    │   }                                                    │
+    │ }                                                      │
+    └────────────────────────────────────────────────────────┘
+                           │
+                           │
+                           ▼
+                  Parse JSON response
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 4: DISPATCHER PARSES RESPONSE                    │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    tool_call = response["tool_call"]
+    tool_name = tool_call["function"]["name"]
+    arguments_str = tool_call["function"]["arguments"]
+
+    ┌────────────────────────────────────────────────────────┐
+    │  Extracted:                                            │
+    │    tool_name = "crop_pierres_detail_panel"             │
+    │    arguments_str = "{\"image_path\": \"screenshot.png\"}"│
+    └────────────────────────────────────────────────────────┘
+
+    Parse arguments JSON string:
+
+    arguments = json.loads(arguments_str)
+
+    ┌────────────────────────────────────────────────────────┐
+    │  Parsed:                                               │
+    │    arguments = {                                       │
+    │      "image_path": "screenshot.png"                    │
+    │    }                                                   │
+    └────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 5: LOOKUP TOOL IN REGISTRY                       │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    if tool_name not in TOOL_REGISTRY:
+        raise ValueError("Unknown tool")
+
+    func = TOOL_REGISTRY[tool_name]
+
+    ┌────────────────────────────────────────────────────────┐
+    │  TOOL_REGISTRY = {                                     │
+    │    "crop_pierres_detail_panel": <function at 0x...>,   │
+    │                                      ^                 │
+    │                                      │                 │
+    │  }                                   │                 │
+    │                            Found! ───┘                 │
+    └────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 6: EXECUTE TOOL                                  │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    result = func(**arguments)
+
+    Expands to:
+
+    result = crop_pierres_detail_panel(image_path="screenshot.png")
+
+    ┌────────────────────────────────────────────────────────┐
+    │  Tool Implementation:                                  │
+    │                                                        │
+    │  1. Load image with OpenCV                             │
+    │  2. Find detail panel region (template matching)       │
+    │  3. Crop panel region                                  │
+    │  4. Extract text with PaddleOCR                        │
+    │  5. Parse fields (name, price, etc.)                   │
+    │  6. Return structured dict                             │
+    └────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 7: RETURN RESULT                                 │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    ┌────────────────────────────────────────────────────────┐
+    │ {                                                      │
+    │   "name": "Parsnip",                                   │
+    │   "description": "A spring vegetable. Still loved...", │
+    │   "price_per_unit": 20,                                │
+    │   "quantity_selected": 5,                              │
+    │   "total_cost": 100                                    │
+    │ }                                                      │
+    └────────────────────────────────────────────────────────┘
+
+Result is returned to caller (web API, CLI, etc.)
+
+
+═══════════════════════════════════════════════════════════════════════════
+                           KEY TAKEAWAYS
+═══════════════════════════════════════════════════════════════════════════
+
+1. Tool definitions are METADATA (JSON) sent to VLM
+   - Tells VLM what tools exist and their parameters
+
+2. VLM returns STRUCTURED JSON (not free-form text)
+   - tool_call.function.name: which tool
+   - tool_call.function.arguments: what arguments (as JSON string!)
+
+3. Dispatcher PARSES and EXECUTES
+   - Parse the JSON response
+   - Parse the arguments JSON string (double parsing!)
+   - Look up function in registry
+   - Call function with unpacked arguments
+
+4. Tool implementations are ORDINARY PYTHON FUNCTIONS
+   - No magic
+   - Return dicts/JSON-serializable objects
+   - Can use any libraries (OpenCV, OCR, etc.)
+
+═══════════════════════════════════════════════════════════════════════════
+
+
+COMPARISON: MANUAL vs FRAMEWORK
+================================
+
+MANUAL (Module 1):
+    You write:
+        tool_call = response["tool_call"]
+        tool_name = tool_call["function"]["name"]
+        arguments = json.loads(tool_call["function"]["arguments"])
+        func = TOOL_REGISTRY[tool_name]
+        result = func(**arguments)
+
+    You control: Everything
+    Complexity: ~20 lines of parsing/dispatch code
+
+SMOLAGENTS (Module 2):
+    You write:
+        agent = CodeAgent(tools=[MyTool()], model=model)
+        result = agent.run("Extract from screenshot")
+
+    Framework controls: Parsing, dispatch, error handling
+    Complexity: ~5 lines of your code
+
+The framework doesn't change HOW it works, just WHO writes the code.
+Understanding manual dispatch helps you debug framework issues.
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        RELATED DIAGRAMS
+═══════════════════════════════════════════════════════════════════════════
+
+- codeagent-execution.txt     - How Smolagents CodeAgent works
+- vllm-architecture.txt        - How vLLM serves the VLM
+- production-pipeline.txt      - Complete production system flow
+- fastapi-integration.txt      - Web API integration

@@ -1,0 +1,536 @@
+FASTAPI INTEGRATION
+===================
+
+How FastAPI connects to VLMOrchestrator for screenshot analysis.
+
+═══════════════════════════════════════════════════════════════════════════
+                    REQUEST/RESPONSE FLOW
+═══════════════════════════════════════════════════════════════════════════
+
+USER BROWSER/CLIENT                FASTAPI APP                 VLMORCHESTRATOR
+┌──────────────────┐              ┌─────────────┐            ┌──────────────┐
+│                  │              │             │            │              │
+│  1. User clicks  │              │             │            │              │
+│     "Upload"     │              │             │            │              │
+│                  │              │             │            │              │
+│  2. Select PNG   │              │             │            │              │
+│     file         │              │             │            │              │
+│                  │  POST        │             │            │              │
+│  3. Submit form  │─────────────>│  /api/v1/   │            │              │
+│                  │  /api/v1/    │  analyze    │            │              │
+│                  │  analyze     │             │            │              │
+│                  │              │             │            │              │
+│                  │  multipart/  │  4. Receive │            │              │
+│                  │  form-data   │     upload  │            │              │
+│                  │              │             │            │              │
+│                  │              │  5. Validate│            │              │
+│                  │              │     content │            │              │
+│                  │              │     type    │            │              │
+│                  │              │             │            │              │
+│                  │              │  6. Save to │            │              │
+│                  │              │     /tmp/   │            │              │
+│                  │              │     xyz.png │            │              │
+│                  │              │             │            │              │
+│                  │              │  7. Call    │  analyze_  │              │
+│                  │              │     orch    │  screenshot│              │
+│                  │              │─────────────────────────>│  8. Validate │
+│                  │              │             │  (/tmp/    │     file     │
+│                  │              │             │  xyz.png)  │     exists   │
+│                  │              │             │            │              │
+│                  │              │             │            │  9. Start    │
+│                  │              │             │            │     MLFlow   │
+│                  │              │             │            │              │
+│                  │              │             │            │ 10. Call VLM │
+│                  │              │             │            │     agent    │
+│                  │              │             │            │              │
+│                  │              │             │            │ 11. Return   │
+│                  │              │             │<──────────────  dict      │
+│                  │              │  12. Receive│  {"name":  │              │
+│                  │              │      result │   "Pars-   │              │
+│                  │              │<─────────────   nip"...} │              │
+│                  │              │             │            │              │
+│                  │              │ 13. Format  │            │              │
+│                  │              │     JSON    │            │              │
+│                  │              │     response│            │              │
+│                  │              │             │            │              │
+│                  │              │ 14. Cleanup │            │              │
+│                  │              │     /tmp/   │            │              │
+│                  │              │     xyz.png │            │              │
+│                  │  HTTP 200    │             │            │              │
+│  15. Receive     │<─────────────│ 15. Return  │            │              │
+│      JSON        │  {"success": │     to user │            │              │
+│                  │   true, ...} │             │            │              │
+│                  │              │             │            │              │
+│  16. Display     │              │             │            │              │
+│      result      │              │             │            │              │
+└──────────────────┘              └─────────────┘            └──────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    FILE UPLOAD HANDLING
+═══════════════════════════════════════════════════════════════════════════
+
+MULTIPART FORM DATA FORMAT:
+
+  Content-Type: multipart/form-data; boundary=----WebKitFormBoundary...
+
+  ------WebKitFormBoundary...
+  Content-Disposition: form-data; name="file"; filename="pierre_shop_001.png"
+  Content-Type: image/png
+
+  <binary PNG data>
+  ------WebKitFormBoundary...--
+
+
+FASTAPI RECEIVES:
+
+  @app.post("/api/v1/analyze")
+  async def analyze_screenshot(file: UploadFile = File(...)):
+                                      ^              ^
+                                      |              |
+                            UploadFile object    Required parameter
+
+  file.filename:      "pierre_shop_001.png"
+  file.content_type:  "image/png"
+  file.file:          SpooledTemporaryFile (binary stream)
+
+
+TEMPORARY FILE CREATION:
+
+  with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+       ^                           ^                ^
+       |                           |                |
+       |                           |                Add .png extension
+       |                           Don't auto-delete (we control cleanup)
+       |
+       Context manager (auto-closes file handle)
+
+    content = await file.read()          # Read uploaded bytes
+    tmp.write(content)                   # Write to disk
+    tmp_path = tmp.name                  # Get path: /tmp/tmpXYZ123.png
+
+  # File is now on disk at tmp_path
+  # Can be read by OpenCV, PaddleOCR, etc.
+
+
+CLEANUP PATTERN:
+
+  try:
+      result = orchestrator.analyze_screenshot(tmp_path)
+      return JSONResponse(content={"success": True, ...})
+
+  except Exception as e:
+      raise HTTPException(status_code=500, detail=str(e))
+
+  finally:
+      Path(tmp_path).unlink(missing_ok=True)  # Delete even if error
+                              ^
+                              |
+                              Don't raise error if already deleted
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    RESPONSE FORMAT
+═══════════════════════════════════════════════════════════════════════════
+
+SUCCESS RESPONSE (HTTP 200):
+
+  {
+    "success": true,
+    "filename": "pierre_shop_001.png",
+    "extraction": {
+      "name": "Parsnip",
+      "description": "A spring vegetable. Still loved by many.",
+      "price_per_unit": 20,
+      "quantity_selected": 5,
+      "total_cost": 100
+    }
+  }
+
+
+ERROR RESPONSE - INVALID FILE TYPE (HTTP 400):
+
+  {
+    "detail": "Invalid file type: text/plain. Must be image."
+  }
+
+
+ERROR RESPONSE - VLM FAILURE (HTTP 500):
+
+  {
+    "detail": "VLM analysis failed: Connection to vLLM refused"
+  }
+
+
+ERROR RESPONSE - FILE NOT FOUND (HTTP 500):
+
+  {
+    "detail": "Image not found: /tmp/xyz.png"
+  }
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    ASYNC PATTERNS
+═══════════════════════════════════════════════════════════════════════════
+
+SYNCHRONOUS (BLOCKING):
+
+  @app.post("/analyze")
+  def analyze(file: UploadFile):     # Not async!
+      result = orchestrator.analyze_screenshot(...)  # Blocks for 2 seconds
+      return result
+
+  Problem:
+    - Request 1 arrives at t=0s, takes 2s
+    - Request 2 arrives at t=0.5s, must wait until t=2s
+    - Request 3 arrives at t=1s, must wait until t=4s
+
+  Total time for 3 requests: 6 seconds
+
+
+ASYNCHRONOUS (NON-BLOCKING):
+
+  @app.post("/analyze")
+  async def analyze(file: UploadFile):  # async!
+      result = await run_in_threadpool(
+          orchestrator.analyze_screenshot, ...
+      )
+      return result
+
+  Benefit:
+    - Request 1 starts at t=0s
+    - Request 2 starts at t=0.5s (doesn't wait!)
+    - Request 3 starts at t=1s (doesn't wait!)
+    - All complete by t=2s
+
+  Total time for 3 requests: 2 seconds
+
+  Performance gain: 3x throughput!
+
+
+EVENT LOOP MODEL:
+
+  Main Thread (Event Loop):
+    ┌──────────────────────────────────┐
+    │  1. Receive Request A            │
+    │  2. Start threadpool task A      │
+    │  3. Receive Request B (async!)   │
+    │  4. Start threadpool task B      │
+    │  5. Receive Request C (async!)   │
+    │  6. Start threadpool task C      │
+    │  7. Task A completes             │
+    │  8. Send response A              │
+    │  9. Task B completes             │
+    │ 10. Send response B              │
+    │ 11. Task C completes             │
+    │ 12. Send response C              │
+    └──────────────────────────────────┘
+
+  Worker Pool (ThreadPoolExecutor):
+    Thread 1: [══════ Task A ══════]
+    Thread 2:   [══════ Task B ══════]
+    Thread 3:     [══════ Task C ══════]
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    CORS CONFIGURATION
+═══════════════════════════════════════════════════════════════════════════
+
+WHY CORS IS NEEDED:
+
+  Browser Security Model:
+    - Frontend running on http://localhost:3000
+    - API running on http://localhost:8000
+    - Different origins = CORS required
+
+  Without CORS:
+    fetch('http://localhost:8000/api/v1/analyze', {...})
+    ❌ Error: "No 'Access-Control-Allow-Origin' header present"
+
+  With CORS Middleware:
+    app.add_middleware(CORSMiddleware, allow_origins=["*"])
+    ✅ Request succeeds
+
+
+CORS MIDDLEWARE CONFIG:
+
+  app.add_middleware(
+      CORSMiddleware,
+      allow_origins=["*"],              # Which domains can access
+      allow_credentials=True,           # Allow cookies
+      allow_methods=["*"],              # Which HTTP methods (GET, POST, etc.)
+      allow_headers=["*"],              # Which headers
+  )
+
+
+PRODUCTION CORS (Restrictive):
+
+  app.add_middleware(
+      CORSMiddleware,
+      allow_origins=[
+          "https://stardew-vision.com",
+          "https://app.stardew-vision.com"
+      ],                                # Only specific domains
+      allow_credentials=True,
+      allow_methods=["GET", "POST"],    # Only needed methods
+      allow_headers=["*"],
+  )
+
+
+PREFLIGHT REQUEST (OPTIONS):
+
+  Browser automatically sends before POST:
+
+  OPTIONS /api/v1/analyze
+  Origin: http://localhost:3000
+  Access-Control-Request-Method: POST
+  Access-Control-Request-Headers: content-type
+
+  Server responds:
+
+  HTTP 200 OK
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, POST, OPTIONS
+  Access-Control-Allow-Headers: content-type
+
+  Then browser sends actual POST request.
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    HEALTH CHECK ENDPOINT
+═══════════════════════════════════════════════════════════════════════════
+
+SIMPLE HEALTH CHECK:
+
+  @app.get("/api/v1/health")
+  async def health_check():
+      return {"status": "healthy", "model": orchestrator.model_id}
+
+
+ADVANCED HEALTH CHECK (with vLLM check):
+
+  @app.get("/api/v1/health")
+  async def health_check():
+      health = {"status": "healthy", "checks": {}}
+
+      # Check orchestrator
+      health["checks"]["orchestrator"] = "ok"
+
+      # Check vLLM connectivity
+      try:
+          response = requests.get(
+              "http://localhost:8001/health",
+              timeout=2
+          )
+          response.raise_for_status()
+          health["checks"]["vllm"] = "connected"
+      except:
+          health["checks"]["vllm"] = "disconnected"
+          health["status"] = "degraded"
+
+      # Check disk space
+      stat = os.statvfs("/tmp")
+      free_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
+      health["checks"]["disk_free_gb"] = round(free_gb, 2)
+      if free_gb < 1.0:
+          health["status"] = "degraded"
+
+      return health
+
+
+KUBERNETES PROBES:
+
+  livenessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 3
+    # If health check fails 3 times, restart pod
+
+  readinessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    # Only send traffic if health check passes
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    INTERACTIVE API DOCS
+═══════════════════════════════════════════════════════════════════════════
+
+SWAGGER UI (automatically generated):
+
+  URL: http://localhost:8000/docs
+
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │ Stardew Vision API - Swagger UI                                      │
+  ├──────────────────────────────────────────────────────────────────────┤
+  │                                                                       │
+  │  POST /api/v1/analyze                                                │
+  │  ▼ Analyze a Stardew Valley screenshot                               │
+  │                                                                       │
+  │  Parameters:                                                          │
+  │    file* (file): Screenshot file                                     │
+  │                                                                       │
+  │  Responses:                                                           │
+  │    200 Success                                                        │
+  │      {                                                                │
+  │        "success": true,                                               │
+  │        "filename": "screenshot.png",                                  │
+  │        "extraction": {...}                                            │
+  │      }                                                                │
+  │                                                                       │
+  │    400 Bad Request (invalid file type)                               │
+  │    500 Internal Server Error (VLM failed)                            │
+  │                                                                       │
+  │  [Try it out] [Execute]                                               │
+  │                                                                       │
+  ├──────────────────────────────────────────────────────────────────────┤
+  │                                                                       │
+  │  GET /api/v1/health                                                  │
+  │  ▼ Health check endpoint                                             │
+  │                                                                       │
+  │  [Try it out] [Execute]                                               │
+  │                                                                       │
+  └──────────────────────────────────────────────────────────────────────┘
+
+
+REDOC (alternative docs):
+
+  URL: http://localhost:8000/redoc
+
+  - Cleaner UI
+  - Better for documentation
+  - No interactive testing
+
+
+OPENAPI SCHEMA:
+
+  URL: http://localhost:8000/openapi.json
+
+  {
+    "openapi": "3.0.0",
+    "info": {
+      "title": "Stardew Vision API",
+      "version": "0.1.0"
+    },
+    "paths": {
+      "/api/v1/analyze": {
+        "post": {
+          "summary": "Analyze a Stardew Valley screenshot",
+          "requestBody": {
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "file": {"type": "string", "format": "binary"}
+                  }
+                }
+              }
+            }
+          },
+          "responses": {...}
+        }
+      }
+    }
+  }
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    CLIENT EXAMPLES
+═══════════════════════════════════════════════════════════════════════════
+
+CURL:
+
+  curl -X POST http://localhost:8000/api/v1/analyze \
+    -F "file=@/path/to/screenshot.png" \
+    -H "Accept: application/json" \
+    | jq
+
+
+PYTHON (requests):
+
+  import requests
+
+  with open("screenshot.png", "rb") as f:
+      files = {"file": f}
+      response = requests.post(
+          "http://localhost:8000/api/v1/analyze",
+          files=files
+      )
+
+  if response.status_code == 200:
+      result = response.json()
+      print(result["extraction"])
+  else:
+      print(f"Error: {response.json()['detail']}")
+
+
+JAVASCRIPT (fetch):
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  fetch('http://localhost:8000/api/v1/analyze', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      console.log(data.extraction);
+    } else {
+      console.error('Upload failed');
+    }
+  });
+
+
+HTTPIE:
+
+  http --form POST http://localhost:8000/api/v1/analyze \
+    file@screenshot.png
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    KEY TAKEAWAYS
+═══════════════════════════════════════════════════════════════════════════
+
+1. FASTAPI HANDLES WEB LAYER
+   - File upload (multipart/form-data)
+   - Request validation (content-type)
+   - Response formatting (JSON)
+   - CORS for browser access
+
+2. ASYNC ENABLES CONCURRENCY
+   - Multiple requests processed concurrently
+   - Non-blocking I/O
+   - Better resource utilization
+
+3. TEMPORARY FILES FOR PROCESSING
+   - Upload → save to /tmp → process → delete
+   - Tools need file paths, not byte streams
+   - Always cleanup (finally block)
+
+4. AUTO-GENERATED DOCS
+   - Swagger UI at /docs
+   - ReDoc at /redoc
+   - OpenAPI schema at /openapi.json
+
+5. HEALTH CHECKS FOR PRODUCTION
+   - Kubernetes probes
+   - Load balancer health checks
+   - Operational visibility
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        RELATED DIAGRAMS
+═══════════════════════════════════════════════════════════════════════════
+
+- tool-calling-flow.txt        - Complete tool calling flow
+- vllm-architecture.txt        - How vLLM serves models
+- production-pipeline.txt      - Full production architecture with monitoring
