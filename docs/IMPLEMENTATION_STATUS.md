@@ -100,12 +100,23 @@ tests/test_tools.py::test_known_fixture_values PASSED                    [100%]
 
 ## In Progress
 
-### Data Collection 🔄
+### Data Collection & Annotation 🔄
 
-- [x] 1 Pierre's shop screenshot collected (`datasets/from-katarina/1_pierres_top.jpg`)
-- [ ] Collect 20+ Pierre's shop screenshots at different resolutions
+**Status**: Ready to annotate 20 images manually
+
+- [x] 22 Pierre's shop screenshots collected (1 PC, 21 iPad)
+- [x] Directory structure created (`datasets/raw/pierre_shop/`, `datasets/annotated/pierre_shop/`)
+- [x] Annotation schema defined (`configs/annotation_schema.json` with `image_hash` + `original_file_name`)
+- [x] Auto-generation script created (`scripts/annotate_pierre_shop.py`)
+- [x] 22 annotations auto-generated (2 succeeded, 20 need manual input)
+- [x] Interactive annotation script created (`scripts/interactive_annotate.py`)
+- [x] HTML viewer generated (`annotation_viewer.html`)
+- [ ] **NEXT: Annotate 20 images manually** (see `docs/ANNOTATION_WORKFLOW.md`)
+- [ ] Validate completed annotations
+- [ ] Identify test split images (left panel ≠ right panel cases)
+- [ ] Create `scripts/generate_splits.py`
+- [ ] Generate train/val/test splits (65% / 20% / 15%)
 - [ ] Collect 50+ screen-type diversity screenshots for orchestrator training
-- [ ] Create train/val/test splits
 
 ---
 
@@ -187,7 +198,26 @@ pytest = ">=9.0.0"
 
 ## Next Steps
 
-### NEXT SESSION (2026-03-21): Agent/Tool-Calling Integration
+### IMMEDIATE NEXT SESSION (2026-04-01): Complete Manual Annotation
+
+**CRITICAL**: This is the ONLY blocker preventing progress to VLM orchestrator work.
+
+**Step 1**: Annotate 20 images
+- Open `annotation_viewer.html` in browser on HOST machine
+- Run `python scripts/interactive_annotate.py` in devcontainer
+- For each image, read the RIGHT PANEL and enter 5 fields
+- See detailed workflow in `docs/ANNOTATION_WORKFLOW.md`
+
+**Step 2**: Validate annotations
+- Run: `python scripts/annotate_pierre_shop.py --mode validate --annotations datasets/annotated/pierre_shop/annotations.jsonl`
+- Verify: 100% schema compliance, all math checks pass
+
+**Step 3**: Create split generator
+- Implement `scripts/generate_splits.py` with manual test image support
+- Identify test images where left panel ≠ right panel
+- Generate 65/20/15 splits
+
+### AFTER ANNOTATION: Agent/Tool-Calling Integration
 
 **Step 1**: Define extraction tool as callable agent
 - Add OpenAI function-calling format to `src/stardew_vision/tools/__init__.py`
@@ -198,7 +228,7 @@ pytest = ">=9.0.0"
 - Create `src/stardew_vision/models/vlm_wrapper.py`
 - Wrap Qwen2.5-VL-7B with tool-calling interface
 - Test: Submit Pierre's shop screenshot → VLM calls `crop_pierres_detail_panel`
-- Research: LangGraph, CrewAI, or other agent frameworks for orchestration
+- Framework: Smolagents (see `docs/agent-frameworks-compared.md`)
 
 ---
 
@@ -221,7 +251,15 @@ pytest = ">=9.0.0"
 
 ## Blockers
 
-None currently.
+### GUI Display in Devcontainer
+
+**Issue**: No image viewer installed in container. Wayland socket is mounted and configured correctly, but programs like `eog`, `feh`, or matplotlib GUI backends are not available.
+
+**Impact**: Interactive annotation script cannot display images directly.
+
+**Workaround**: Use HTML viewer on host + terminal prompts in container (documented in `docs/ANNOTATION_WORKFLOW.md`).
+
+**Permanent fix (optional)**: Add image viewer to Dockerfile and rebuild container.
 
 ---
 

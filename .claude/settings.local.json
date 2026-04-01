@@ -62,7 +62,9 @@
       "Bash(pytest:*)",
       "Bash(pip list:*)",
       "WebFetch(domain:www.anthropic.com)",
-      "WebFetch(domain:claude.com)"
+      "WebFetch(domain:claude.com)",
+      "Bash(python3 scripts/test_extraction_tool.py)",
+      "Bash(python -m json.tool)"
     ]
   }
 }

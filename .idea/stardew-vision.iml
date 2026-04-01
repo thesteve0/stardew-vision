@@ -10,7 +10,7 @@
       <excludeFolder url="file://$MODULE_DIR$/models" />
       <excludeFolder url="file://$MODULE_DIR$/datasets" />
     </content>
-    <orderEntry type="jdk" jdkName="uv (stardew-vision)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.12 (stardew-vision)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>
