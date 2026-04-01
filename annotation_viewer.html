@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Pierre's Shop Annotation Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .image-card {
+            background: white;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .image-card h2 {
+            margin-top: 0;
+            color: #d97000;
+        }
+        .image-card img {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+        }
+        .metadata {
+            margin: 10px 0;
+            color: #666;
+            font-size: 0.9em;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+            color: white;
+            margin-left: 10px;
+        }
+        .instructions {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pierre's Shop - Images to Annotate</h1>
+
+    <div class="instructions">
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Keep this page open while running <code>python scripts/interactive_annotate.py</code></li>
+            <li>For each image, look at the <strong>RIGHT PANEL</strong> (orange detail view)</li>
+            <li>Enter the 5 fields into the terminal when prompted</li>
+            <li>Images marked with ✓ are already annotated (you can skip or review them)</li>
+        </ol>
+    </div>
+
+
+    <div class="image-card" id="img-1">
+        <h2>#1 - 1_pierres_top.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 599e050d359198b1... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/1_pierres_top.jpg" alt="1_pierres_top.jpg">
+    </div>
+
+    <div class="image-card" id="img-2">
+        <h2>#2 - IMG_7708.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 9f8c3386092a9253... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7708.jpg" alt="IMG_7708.jpg">
+    </div>
+
+    <div class="image-card" id="img-3">
+        <h2>#3 - IMG_7709.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 5a4177c878545ebe... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7709.jpg" alt="IMG_7709.jpg">
+    </div>
+
+    <div class="image-card" id="img-4">
+        <h2>#4 - IMG_7710.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 37e16269d627ea29... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7710.jpg" alt="IMG_7710.jpg">
+    </div>
+
+    <div class="image-card" id="img-5">
+        <h2>#5 - IMG_7711.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: e0cd499c809cbbea... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7711.jpg" alt="IMG_7711.jpg">
+    </div>
+
+    <div class="image-card" id="img-6">
+        <h2>#6 - IMG_7712.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: bd2275978d0396c9... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7712.jpg" alt="IMG_7712.jpg">
+    </div>
+
+    <div class="image-card" id="img-7">
+        <h2>#7 - IMG_7713.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 31304065baa2847c... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7713.jpg" alt="IMG_7713.jpg">
+    </div>
+
+    <div class="image-card" id="img-8">
+        <h2>#8 - IMG_7714.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 47cda4b2f87b1487... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7714.jpg" alt="IMG_7714.jpg">
+    </div>
+
+    <div class="image-card" id="img-9">
+        <h2>#9 - IMG_7715.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 378669e7c4149e04... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7715.jpg" alt="IMG_7715.jpg">
+    </div>
+
+    <div class="image-card" id="img-10">
+        <h2>#10 - IMG_7716.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 8ad71ec8fe484f3b... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7716.jpg" alt="IMG_7716.jpg">
+    </div>
+
+    <div class="image-card" id="img-11">
+        <h2>#11 - IMG_7717.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: e9434aed05cc55de... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7717.jpg" alt="IMG_7717.jpg">
+    </div>
+
+    <div class="image-card" id="img-12">
+        <h2>#12 - IMG_7718.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 391ec4575df05a98... | Resolution: 1600x1200 | Energy: +13 | Health: +5
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7718.jpg" alt="IMG_7718.jpg">
+    </div>
+
+    <div class="image-card" id="img-13">
+        <h2>#13 - IMG_7719.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: d6fa08bae7f54627... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7719.jpg" alt="IMG_7719.jpg">
+    </div>
+
+    <div class="image-card" id="img-14">
+        <h2>#14 - IMG_7720.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 7806cba814540a67... | Resolution: 1600x1200 | Energy: +13 | Health: +5
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7720.jpg" alt="IMG_7720.jpg">
+    </div>
+
+    <div class="image-card" id="img-15">
+        <h2>#15 - IMG_7721.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 93673b1677bbd1b8... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7721.jpg" alt="IMG_7721.jpg">
+    </div>
+
+    <div class="image-card" id="img-16">
+        <h2>#16 - IMG_7722.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 9a5108836571cf0f... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7722.jpg" alt="IMG_7722.jpg">
+    </div>
+
+    <div class="image-card" id="img-17">
+        <h2>#17 - IMG_7723.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 0417c3a85d668b83... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7723.jpg" alt="IMG_7723.jpg">
+    </div>
+
+    <div class="image-card" id="img-18">
+        <h2>#18 - IMG_7728.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 0eeb300724d113bd... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7728.jpg" alt="IMG_7728.jpg">
+    </div>
+
+    <div class="image-card" id="img-19">
+        <h2>#19 - IMG_7729.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 4ad4f298d3e2dc0e... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7729.jpg" alt="IMG_7729.jpg">
+    </div>
+
+    <div class="image-card" id="img-20">
+        <h2>#20 - IMG_7730.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: 99c77eeab5950c1e... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7730.jpg" alt="IMG_7730.jpg">
+    </div>
+
+    <div class="image-card" id="img-21">
+        <h2>#21 - IMG_7731.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: a6596283b41506c4... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7731.jpg" alt="IMG_7731.jpg">
+    </div>
+
+    <div class="image-card" id="img-22">
+        <h2>#22 - IMG_7732.jpg<span class="status-badge" style="background-color: #4caf50">✓ Annotated</span></h2>
+        <div class="metadata">
+            Hash: c4b3580ccd9e4187... | Resolution: 1600x1200
+        </div>
+        <img src="datasets/pierre_shop/images/IMG_7732.jpg" alt="IMG_7732.jpg">
+    </div>
+
+    <div style="margin-top: 40px; padding: 20px; background: #e8f5e9; border-radius: 8px;">
+        <p><strong>Total images: 22</strong> (22 already annotated, 0 need annotation)</p>
+        <p>After completing annotations, validate with:<br>
+        <code>python scripts/annotate_pierre_shop.py --mode validate --annotations datasets/annotated/pierre_shop/annotations.jsonl</code></p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pierre's Shop Ground Truth Annotation",
+  "description": "Ground truth annotation schema for Pierre's shop screenshots. Includes metadata for Feast feature store compatibility. NOTE: This schema is specific to shop items. Future work will require a more general schema or subtypes for other item categories (e.g., weapons, tools).",
+  "type": "object",
+  "required": ["image_hash", "original_file_name", "screen_type", "image_path", "expected_extraction", "created_at", "version"],
+  "properties": {
+    "image_hash": {
+      "type": "string",
+      "description": "SHA256 hash of the image file for unique identification"
+    },
+    "original_file_name": {
+      "type": "string",
+      "description": "Original filename of the screenshot"
+    },
+    "screen_type": {
+      "type": "string",
+      "enum": ["pierre_shop"],
+      "description": "Screen type classifier label"
+    },
+    "image_path": {
+      "type": "string",
+      "description": "Relative path to the screenshot file"
+    },
+    "resolution": {
+      "type": "array",
+      "items": {"type": "integer"},
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Image resolution [width, height] in pixels"
+    },
+    "expected_extraction": {
+      "type": "object",
+      "required": ["name", "description", "price_per_unit", "quantity_selected", "total_cost"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Item name as shown in the detail panel"
+        },
+        "description": {
+          "type": "string",
+          "description": "Item description text from the detail panel"
+        },
+        "price_per_unit": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cost per single item in gold"
+        },
+        "quantity_selected": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of items selected for purchase"
+        },
+        "total_cost": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total purchase cost in gold"
+        },
+        "energy": {
+          "type": "string",
+          "description": "Energy restoration value with sign (e.g., '+13') or empty string if not applicable",
+          "pattern": "^(\\+\\d+|\\-\\d+|)$"
+        },
+        "health": {
+          "type": "string",
+          "description": "Health restoration value with sign (e.g., '+5') or empty string if not applicable",
+          "pattern": "^(\\+\\d+|\\-\\d+|)$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of annotation creation"
+    },
+    "annotated_by": {
+      "type": "string",
+      "description": "Annotation source: 'auto', 'human', 'human_verified'"
+    },
+    "extraction_succeeded": {
+      "type": "boolean",
+      "description": "Whether the extraction tool successfully processed this image"
+    },
+    "version": {
+      "type": "string",
+      "description": "Annotation schema version"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes about this annotation"
+    }
+  },
+  "additionalProperties": false
+}
