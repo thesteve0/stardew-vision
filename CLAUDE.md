@@ -80,7 +80,9 @@ We are using Ruff
 
 See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 
-- **Pipeline**: Agent/tool-calling. Orchestrator VLM (Qwen2.5-VL-7B, GPU) classifies the screen type and dispatches a tool call. CPU extraction agents (OpenCV + PaddleOCR) crop the region and extract text. Result goes to MeloTTS → WAV. See [ADR-009](docs/adr/009-agent-tool-calling-architecture.md).
+- **Pipeline**: Full agentic loop. FastAPI is the agent runtime (manages the loop, executes tools, holds base64 image, logs errors). Qwen2.5-VL-7B is the reasoner (classifies screen, calls extraction tool, checks for failures/typos, applies corrections, assembles narration, calls TTS). The loop runs until Qwen signals done — at most 4 turns for the happy path. See [ADR-009](docs/adr/009-agent-tool-calling-architecture.md).
+- **Agent loop tools**: `crop_pierres_detail_panel(image_b64, debug=False)` → OCR JSON; `crop_pierres_detail_panel(image_b64, debug=True)` → OCR JSON + `ocr_raw`; `text_to_speech(text)` → WAV bytes.
+- **Error handling**: Qwen silently corrects recoverable typos. For unresolvable failures Qwen sets `has_errors=True`; FastAPI saves the screenshot to `datasets/errors/` and logs the failure. Narration always includes whatever partial data was extracted.
 - **Extraction layer**: OpenCV template matching for UI region location; PaddleOCR (PP-OCRv5) for text extraction; both CPU-only. Chosen over EasyOCR for faster CPU throughput, SOTA accuracy, and correct capitalization preservation. See [ADR-010](docs/adr/010-screen-region-extraction.md) and [docs/ocr-choice.md](docs/ocr-choice.md).
 - **MVP screen type**: Pierre's General Store detail panel — name, description, price per unit, quantity selected, total cost.
 - **Fine-tuning**: Orchestrator VLM fine-tuned on `(screenshot, tool_call_response)` pairs. LoRA via PEFT for Qwen2.5-VL-7B; TRL SFTTrainer for SmolVLM2-2.2B. Both in FP16. See [ADR-001](docs/adr/001-vlm-selection.md).

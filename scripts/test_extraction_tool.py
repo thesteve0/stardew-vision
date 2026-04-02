@@ -2,7 +2,7 @@
 Test the Pierre's shop extraction tool on the original screenshot.
 """
 
-from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel
+from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path as crop_pierres_detail_panel
 import json
 
 # Test on the original screenshot

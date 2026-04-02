@@ -1,6 +1,6 @@
 # Implementation Status
 
-**Last updated**: 2026-03-20
+**Last updated**: 2026-04-02
 
 ## Completed Features
 
@@ -124,27 +124,35 @@ tests/test_tools.py::test_known_fixture_values PASSED                    [100%]
 
 ### Phase 1 (Remaining)
 
-7. **VLM Orchestrator Wrapper**
-   - File: `src/stardew_vision/models/vlm_wrapper.py`
-   - Task: Wrap Qwen2.5-VL-7B with tool-calling interface
+7. **`ocr_raw` debug output** for `crop_pierres_detail_panel`
+   - Add `debug=True` mode that returns raw OCR boxes as structured JSON (not stdout)
+   - Needed for Qwen to reason about raw OCR when failures occur
 
-8. **Zero-shot Baseline**
-   - Test if Qwen2.5-VL-7B can dispatch correct tool without training
+8. **TTS Tool**
+   - File: `src/stardew_vision/tts/synthesize.py`
+   - Library: MeloTTS-English
+   - Interface: `text_to_speech(text: str) -> bytes` (WAV bytes)
 
-9. **Fine-tuning**
-   - Train orchestrator on screen-type classification
-   - Log to MLFlow
+9. **Agent Loop (FastAPI as runtime)**
+   - File: `src/stardew_vision/serving/inference.py`
+   - Raw OpenAI client multi-turn loop (no agent framework)
+   - Manages: tool dispatch, image injection, has_errors logging, error image save
+   - Error images saved to `datasets/errors/<timestamp>_<uuid>.png`
+   - Tool definitions in OpenAI function-calling format
 
-10. **TTS Integration**
-    - File: `src/stardew_vision/tts/synthesize.py`
-    - Library: MeloTTS-English
+10. **Zero-shot Baseline**
+    - Test if Qwen2.5-VL-7B runs the full loop correctly without fine-tuning
 
-11. **Web Application**
+11. **Fine-tuning**
+    - Train orchestrator on multi-turn conversation data
+    - Log to MLFlow
+
+12. **Web Application**
     - FastAPI server (port 8000)
     - Screenshot upload endpoint
-    - Audio response
+    - Audio response with autoplay
 
-12. **End-to-End Integration**
+13. **End-to-End Integration**
     - Upload screenshot → audio plays
 
 ### Phase 2: TV Screen Dialog
@@ -198,37 +206,25 @@ pytest = ">=9.0.0"
 
 ## Next Steps
 
-### IMMEDIATE NEXT SESSION (2026-04-01): Complete Manual Annotation
+### NEXT SESSION (2026-04-02): Build the Agent Loop
 
-**CRITICAL**: This is the ONLY blocker preventing progress to VLM orchestrator work.
+**Architecture confirmed**: FastAPI is the agent runtime. Qwen is the reasoner. No agent framework — raw OpenAI client. See ADR-009 for full design.
 
-**Step 1**: Annotate 20 images
-- Open `annotation_viewer.html` in browser on HOST machine
-- Run `python scripts/interactive_annotate.py` in devcontainer
-- For each image, read the RIGHT PANEL and enter 5 fields
-- See detailed workflow in `docs/ANNOTATION_WORKFLOW.md`
+**Step 1**: Add `ocr_raw` to `crop_pierres_detail_panel` debug mode
+- When `debug=True`, return `ocr_raw` list in the JSON response (not stdout)
+- This lets Qwen reason about raw OCR boxes when it detects failures
 
-**Step 2**: Validate annotations
-- Run: `python scripts/annotate_pierre_shop.py --mode validate --annotations datasets/annotated/pierre_shop/annotations.jsonl`
-- Verify: 100% schema compliance, all math checks pass
+**Step 2**: Write `src/stardew_vision/tts/synthesize.py`
+- MeloTTS wrapper: `text_to_speech(text: str) -> bytes`
+- Returns WAV bytes; FastAPI streams to browser
 
-**Step 3**: Create split generator
-- Implement `scripts/generate_splits.py` with manual test image support
-- Identify test images where left panel ≠ right panel
-- Generate 65/20/15 splits
+**Step 3**: Write `src/stardew_vision/serving/inference.py`
+- Multi-turn agent loop using raw OpenAI client
+- Tool dispatch: inject base64 image, call extraction function, return result to Qwen
+- Error handling: on `has_errors=True` from Qwen, save image to `datasets/errors/`, write structured log
 
-### AFTER ANNOTATION: Agent/Tool-Calling Integration
-
-**Step 1**: Define extraction tool as callable agent
-- Add OpenAI function-calling format to `src/stardew_vision/tools/__init__.py`
-- Define `TOOL_DEFINITIONS` with schema
-- Map tool names to Python functions
-
-**Step 2**: Build VLM orchestrator to call the agent
-- Create `src/stardew_vision/models/vlm_wrapper.py`
-- Wrap Qwen2.5-VL-7B with tool-calling interface
-- Test: Submit Pierre's shop screenshot → VLM calls `crop_pierres_detail_panel`
-- Framework: Smolagents (see `docs/agent-frameworks-compared.md`)
+**Step 4**: Test zero-shot loop
+- Does Qwen2.5-VL-7B correctly run all turns without fine-tuning?
 
 ---
 

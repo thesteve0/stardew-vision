@@ -53,6 +53,9 @@ def _fixture_skip(reason: str = "Fixture screenshot or template not available"):
 
 def test_panel_not_found_raises(tmp_path):
     """Passing a solid-colour image should raise PanelNotFoundError."""
+    import base64
+
+    import cv2
     from stardew_vision.tools.crop_pierres_detail_panel import (
         PanelNotFoundError,
         crop_pierres_detail_panel,
@@ -64,13 +67,11 @@ def test_panel_not_found_raises(tmp_path):
 
     # Create a blank image that will never match the template
     blank = np.zeros((200, 200, 3), dtype=np.uint8)
-    blank_path = tmp_path / "blank.png"
-
-    import cv2
-    cv2.imwrite(str(blank_path), blank)
+    _, buf = cv2.imencode(".png", blank)
+    image_b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
 
     with pytest.raises(PanelNotFoundError):
-        crop_pierres_detail_panel(blank_path)
+        crop_pierres_detail_panel(image_b64)
 
 
 def test_parse_pierre_fields_structure():
@@ -78,7 +79,7 @@ def test_parse_pierre_fields_structure():
     from stardew_vision.tools.crop_pierres_detail_panel import parse_pierre_fields
 
     result = parse_pierre_fields([])
-    assert set(result.keys()) == {"name", "description", "price_per_unit", "quantity_selected", "total_cost"}
+    assert set(result.keys()) == {"name", "description", "price_per_unit", "quantity_selected", "total_cost", "energy", "health"}
 
 
 def test_parse_pierre_fields_types():
@@ -134,19 +135,19 @@ def test_locate_panel_finds_match():
 
 @_fixture_skip()
 def test_extract_returns_required_keys():
-    """Full extraction returns all five required keys."""
-    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel
+    """Full extraction returns all required keys."""
+    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
-    result = crop_pierres_detail_panel(FIXTURE_SCREENSHOT)
-    assert set(result.keys()) == {"name", "description", "price_per_unit", "quantity_selected", "total_cost"}
+    result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT)
+    assert set(result.keys()) == {"name", "description", "price_per_unit", "quantity_selected", "total_cost", "energy", "health"}
 
 
 @_fixture_skip()
 def test_field_types():
     """Extracted name/description are str; price fields are int."""
-    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel
+    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
-    result = crop_pierres_detail_panel(FIXTURE_SCREENSHOT)
+    result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT)
     assert isinstance(result["name"], str)
     assert isinstance(result["description"], str)
     assert isinstance(result["price_per_unit"], int)
@@ -158,9 +159,9 @@ def test_field_types():
 def test_known_fixture_values():
     """Extracted values match ground truth for the fixture screenshot."""
     from rapidfuzz import fuzz
-    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel
+    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
-    result = crop_pierres_detail_panel(FIXTURE_SCREENSHOT)
+    result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT)
 
     # String fields: rapidfuzz ratio >= 90
     name_ratio = fuzz.ratio(result["name"].lower(), GROUND_TRUTH["name"].lower())

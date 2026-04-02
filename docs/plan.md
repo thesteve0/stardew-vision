@@ -1,13 +1,14 @@
 # Stardew Vision: Project Plan
 
-**Last updated**: 2026-03-20
-**Talk deadline**: 1-2 months
-**Status**: Phase 1 extraction tool complete — Pierre's shop OCR working with 85-99% confidence
+**Last updated**: 2026-04-02
+**Talk deadline**: ~1 month
+**Status**: Phase 1 extraction tool complete (93% field accuracy). Agentic loop architecture finalized. Next: build the loop.
 
-**NEXT SESSION (2026-03-21)**: Agent/tool-calling integration
-- Step 1: Define extraction tool in OpenAI function-calling format
-- Step 2: Build VLM orchestrator to call the agent
-- Research: LangGraph, CrewAI, or other agent frameworks
+**NEXT SESSION**: Build the agent loop
+- Step 1: Add `ocr_raw` structured debug output to `crop_pierres_detail_panel`
+- Step 2: Write `text_to_speech` tool wrapper (MeloTTS)
+- Step 3: Write FastAPI agent loop in `src/stardew_vision/serving/inference.py`
+- Step 4: Test Qwen zero-shot on Pierre's shop screenshot
 
 This is the authoritative project plan. It is referenced from `CLAUDE.md`. Update this document as decisions change; use the ADRs in `docs/adr/` to document *why* each decision was made.
 
@@ -26,45 +27,55 @@ This is the authoritative project plan. It is referenced from `CLAUDE.md`. Updat
 
 ## Architecture Overview
 
+FastAPI is the **agent runtime** — it manages the loop, executes tool calls, holds the base64 image, and handles error logging. Qwen is the **reasoner** — it decides what to call, evaluates results, applies corrections, and assembles narration. This is the same relationship as Claude Code (shell/runtime) and Claude LLM (reasoner).
+
 ```
 User uploads screenshot (iPad or browser)
   |
   v
 FastAPI POST /analyze  (port 8000)
+  encodes image → base64, holds it for the request lifetime
   |
   v
-Orchestrator VLM  (Qwen2.5-VL-7B-Instruct, FP16, ROCm, vLLM port 8001)
-  Classifies screen type; returns tool_call response
-  |
-  +-- tool_call: crop_pierres_detail_panel  -----> OpenCV crop + PaddleOCR  [Phase 1 MVP ✓]
-  |                                                  {"name", "description",
-  |                                                   "price_per_unit",
-  |                                                   "quantity_selected",
-  |                                                   "total_cost"}
-  |
-  +-- tool_call: crop_tv_dialog  ----------------> OpenCV crop + PaddleOCR  [Phase 2]
-  |                                                  {"text"}
-  |
-  +-- tool_call: crop_inventory_tooltip  --------> OpenCV crop + PaddleOCR  [Phase 3]
-                                                     {"name", "description",
-                                                      "sell_price"}
+═══════════════════════════════════════════════════════════════
+  AGENT LOOP  (raw OpenAI client; no agent framework)
+═══════════════════════════════════════════════════════════════
+
+  Turn 1 — Extraction
+  FastAPI → Qwen: image + system prompt + tool list
+  Qwen → tool_call: crop_pierres_detail_panel  ─────> OpenCV + PaddleOCR [Phase 1 MVP ✓]
+                                                        Returns: {name, description,
+                                                                  price_per_unit,
+                                                                  quantity_selected,
+                                                                  total_cost,
+                                                                  energy, health}
+  Turn 2 — Quality check + correction
+  Qwen reviews OCR result:
+    • Silently fixes recoverable typos using language knowledge
+    • If failures: tool_call crop_pierres_detail_panel(debug=True) ─> +ocr_raw
+    • If unresolvable: sets has_errors=True
+  FastAPI on has_errors=True:
+    • Saves screenshot → datasets/errors/<timestamp>_<uuid>.png
+    • Logs image path + error + raw OCR
+
+  Turn 3 — Speech synthesis
+  Qwen assembles narration text (with error prefix if has_errors=True)
+  Qwen → tool_call: text_to_speech(text="...") ─────> MeloTTS (CPU, WAV)
+
+  LOOP ENDS
   |
   v
-Narration template (Python string formatting)
-  "You are looking at Parsnip Seeds. Plant these in the spring.
-   It costs 20 gold each. You have selected 5. Total cost: 100 gold."
-  |
-  v
-MeloTTS synthesis  (CPU, WAV output)
-  |
-  v
-FastAPI response  (audio/wav)
+FastAPI response  (audio/wav, autoplay)
   |
   v
 Browser <audio> element plays immediately
 ```
 
-**Key architectural property**: The orchestrator VLM uses GPU for vision classification only. Text extraction (OpenCV + PaddleOCR) runs on CPU. New screen types are added by writing one extraction function and adding training examples — no architectural changes.
+Phase 2 and 3 tools slot into the same loop:
+- `crop_tv_dialog(image_b64)` → `{"text": str}` [Phase 2]
+- `crop_inventory_tooltip(image_b64)` → `{"name", "description", "sell_price"}` [Phase 3]
+
+**Key architectural property**: The orchestrator VLM uses GPU for vision reasoning only. Text extraction (OpenCV + PaddleOCR) and TTS (MeloTTS) run on CPU. New screen types are added by writing one extraction function and adding training examples — no loop changes needed.
 
 ---
 
@@ -296,13 +307,15 @@ Key differences:
 4. ✅ Build anchor template: `datasets/assets/templates/pierres_detail_panel_corner.png` (2026-03-20)
 5. ✅ Write `src/stardew_vision/tools/crop_pierres_detail_panel.py` (OpenCV crop + PaddleOCR + parser) (2026-03-20)
 6. ✅ Write unit tests: `tests/test_tools.py` with fixture screenshots (8/8 tests passing) (2026-03-20)
-7. Write `src/stardew_vision/models/vlm_wrapper.py` (Qwen2.5-VL-7B orchestrator, tool-calling format)
-8. Run zero-shot baseline: does Qwen2.5-VL-7B dispatch the correct tool zero-shot?
-9. Fine-tune orchestrator on screen-type training data; log to MLFlow
-10. Write `src/stardew_vision/tts/synthesize.py` (MeloTTS)
-11. Write `src/stardew_vision/webapp/app.py` + `routes.py` + `index.html`
-12. End-to-end integration test: upload Pierre's shop screenshot → audio plays
-13. Add ports 8000, 8001 to `devcontainer.json` `forwardPorts`
+7. Add `ocr_raw` structured debug output to `crop_pierres_detail_panel` (debug=True mode)
+8. Write `src/stardew_vision/tts/synthesize.py` (MeloTTS wrapper)
+9. Write `src/stardew_vision/serving/inference.py` (FastAPI agent loop: raw OpenAI client, multi-turn dispatch, error logging)
+10. Write tool definitions in OpenAI function-calling format (`src/stardew_vision/tools/__init__.py`)
+11. Run zero-shot baseline: does Qwen2.5-VL-7B run the full loop correctly zero-shot?
+12. Fine-tune orchestrator on multi-turn conversation training data; log to MLFlow
+13. Write `src/stardew_vision/webapp/app.py` + `routes.py` + `index.html`
+14. End-to-end integration test: upload Pierre's shop screenshot → audio plays
+15. Add ports 8000, 8001 to `devcontainer.json` `forwardPorts`
 
 ### Phase 2: TV Screen Dialog
 
@@ -388,8 +401,8 @@ The MVP is working when all of the following pass:
 
 - [x] `src/stardew_vision/tools/crop_pierres_detail_panel.py` extracts correct fields from a fixture screenshot (2026-03-20)
 - [x] `pytest tests/test_tools.py` — all extraction unit tests pass (8/8 passing, 2026-03-20)
-- [ ] Zero-shot orchestrator correctly dispatches `crop_pierres_detail_panel` for a Pierre's shop screenshot
-- [ ] Fine-tuned orchestrator: screen classification accuracy >= 95% on validation set
+- [ ] Zero-shot orchestrator runs full agentic loop (extract → check → correct → TTS) for a Pierre's shop screenshot
+- [ ] Fine-tuned orchestrator: screen classification accuracy >= 95%, correction accuracy >= 80% on validation set
 - [x] Field extraction accuracy >= 90% on Pierre's shop validation screenshots (85-99% OCR confidence, 2026-03-20)
 - [ ] `vllm serve models/fine-tuned/...` starts on port 8001 with tool-calling enabled
 - [ ] `uvicorn src.stardew_vision.webapp.app:app --port 8000` starts

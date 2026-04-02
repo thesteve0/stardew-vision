@@ -64,7 +64,10 @@
       "WebFetch(domain:www.anthropic.com)",
       "WebFetch(domain:claude.com)",
       "Bash(python3 scripts/test_extraction_tool.py)",
-      "Bash(python -m json.tool)"
+      "Bash(python -m json.tool)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(grep -E \"\\\\.\\(py|json\\)$\")",
+      "Bash(python -m pytest tests/test_tools.py -v)"
     ]
   }
 }

@@ -10,6 +10,7 @@ so the extractor works at any resolution (1080p, 1440p, 4K).
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from pathlib import Path
@@ -27,10 +28,10 @@ _LAYOUT_FILE = _TEMPLATES_DIR / "pierre_panel_layout.json"
 _TEMPLATE_FILE = _TEMPLATES_DIR / "pierres_detail_panel_corner.png"
 
 # Stardew Valley's discrete UI scale factors
-_MATCH_SCALES = [0.75, 1.0, 1.25, 1.5]
+_MATCH_SCALES = [1.0, 1.25, 1.5]
 
 # Confidence threshold for template matching
-_MATCH_THRESHOLD = 0.85
+_MATCH_THRESHOLD = 0.65
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +136,9 @@ def run_ocr(cropped: np.ndarray) -> list[dict]:
     vertical centre of the text block as a fraction of the cropped panel height.
     """
     ocr = _load_ocr()
-    panel_h = cropped.shape[0]
-    result = ocr.predict(cropped)
+    upscaled = cv2.resize(cropped, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+    panel_h = upscaled.shape[0]
+    result = ocr.predict(upscaled)
 
     records = []
     # PaddleOCR 3.x returns a list with one dict containing 'rec_texts', 'rec_scores', 'rec_polys'
@@ -164,64 +166,96 @@ def run_ocr(cropped: np.ndarray) -> list[dict]:
 
 def parse_pierre_fields(ocr_results: list[dict]) -> dict:
     """
-    Assign OCR text blocks to Pierre's shop fields by relative Y position.
+    Extract Pierre's shop fields from OCR results.
 
-    Panel layout (approximate relative Y within the cropped detail panel):
-      0.00 – 0.05  → item name
-      0.05 – 0.12  → description (may span multiple lines)
-      0.12 – 1.00  → price / quantity / total rows
+    Strategy:
+    - Name: topmost text block(s) (rel_y < 0.05)
+    - Qty/total: detected by pattern "×N: total" regardless of position
+    - Middle zone: everything between name and qty/total line
+      - Price: a standalone number in the middle zone
+      - Description: all remaining middle-zone text joined in reading order
     """
     sorted_results = sorted(ocr_results, key=lambda r: r["rel_y"])
 
-    name_parts: list[str] = []
-    desc_parts: list[str] = []
-    price_texts: list[tuple[float, str]] = []
+    qty_total_pattern = re.compile(r"[x×](\d+):\s*(\d[\d,]*)")
+    # Price line: leading digits, optional G/g suffix, optional single trailing digit
+    # from the gold coin icon (OCR renders it as "0"), e.g. "100 0" or "30g" or "90 "
+    price_pattern = re.compile(r"^([\d,]+)\s*(?:[Gg]|\d)?\s*$")
+    energy_pattern = re.compile(r"\+(\d+)\s*[Ee]nergy")
+    health_pattern = re.compile(r"\+(\d+)\s*[Hh]ealth")
+    # Single stray characters are icon rendering artifacts, not text
+    icon_artifact_pattern = re.compile(r"^[+HhEe]$")
 
-    price_pattern = re.compile(r"(\d[\d,]*)\s*[Gg]?$")
-
-    for rec in sorted_results:
-        text = rec["text"].strip()
-        y = rec["rel_y"]
-
-        if y < 0.05:
-            name_parts.append(text)
-        elif y < 0.12:
-            desc_parts.append(text)
-        else:
-            price_texts.append((y, text))
-
-    name = " ".join(name_parts).strip()
-    description = " ".join(desc_parts).strip()
-
-    # Extract numeric price values from the lower zone
-    price_per_unit = 0
+    # First pass: find the qty/total line and its y position
     quantity_selected = 0
     total_cost = 0
+    qty_total_y = 1.0
+    for rec in sorted_results:
+        m = qty_total_pattern.search(rec["text"])
+        if m:
+            quantity_selected = int(m.group(1))
+            total_cost = int(m.group(2).replace(",", ""))
+            qty_total_y = rec["rel_y"]
+            break
 
-    # Pattern for "x{qty}: {total}" format
-    qty_total_pattern = re.compile(r"x(\d+):\s*(\d[\d,]*)")
+    # Second pass: bucket remaining text into name vs middle zone
+    name_parts: list[str] = []
+    middle: list[tuple[float, str]] = []
 
-    for y, text in price_texts:
-        text_clean = text.strip()
-
-        # Check for quantity/total line (format: "x60: 1200")
-        qty_total_match = qty_total_pattern.search(text_clean)
-        if qty_total_match:
-            quantity_selected = int(qty_total_match.group(1))
-            total_cost = int(qty_total_match.group(2).replace(",", ""))
+    for rec in sorted_results:
+        if qty_total_pattern.search(rec["text"]):
             continue
+        text = rec["text"].strip()
+        y = rec["rel_y"]
+        if y < 0.05:
+            name_parts.append(text)
+        elif y < qty_total_y:
+            middle.append((y, text))
 
-        # Check for plain price (just a number, possibly with 'g')
-        price_match = price_pattern.search(text_clean)
+    # Split middle zone into price, energy, health, and description
+    price_per_unit = 0
+    energy = ""
+    health = ""
+    desc_parts: list[str] = []
+
+    for y, text in middle:
+        if icon_artifact_pattern.match(text):
+            continue
+        energy_match = energy_pattern.search(text)
+        if energy_match:
+            energy = f"+{energy_match.group(1)}"
+            continue
+        health_match = health_pattern.search(text)
+        if health_match:
+            health = f"+{health_match.group(1)}"
+            continue
+        price_match = price_pattern.match(text)
         if price_match and price_per_unit == 0:
             price_per_unit = int(price_match.group(1).replace(",", ""))
+        else:
+            desc_parts.append(text)
+
+    # Cross-validate total_cost using price × qty.
+    # The gold coin icon next to the total can OCR as "0" and merge onto the
+    # number (e.g. "30" + icon → "300"). If dropping the trailing digit gives
+    # the expected product, correct it.
+    if price_per_unit > 0 and quantity_selected > 0:
+        expected = price_per_unit * quantity_selected
+        if total_cost != expected:
+            total_str = str(total_cost)
+            if len(total_str) > 1:
+                candidate = int(total_str[:-1])
+                if candidate == expected:
+                    total_cost = candidate
 
     return {
-        "name": name,
-        "description": description,
+        "name": " ".join(name_parts).strip(),
+        "description": " ".join(desc_parts).strip(),
         "price_per_unit": price_per_unit,
         "quantity_selected": quantity_selected,
         "total_cost": total_cost,
+        "energy": energy,
+        "health": health,
     }
 
 
@@ -241,41 +275,48 @@ def _load_panel_layout() -> dict:
 # ---------------------------------------------------------------------------
 
 
-def crop_pierres_detail_panel(image_path: str | Path, debug: bool = False) -> dict:
+def crop_pierres_detail_panel(image_b64: str, debug: bool = False) -> dict:
     """
-    Locate Pierre's shop detail panel in *image_path* and extract text fields.
+    Locate Pierre's shop detail panel in a base64-encoded screenshot and extract
+    text fields.
+
+    This is the production interface. The coordinating VLM receives the image,
+    classifies the screen type, and emits a tool call. The webapp dispatch layer
+    holds the original base64 image and passes it here — no shared filesystem
+    required between pods.
 
     Parameters
     ----------
-    image_path:
-        Path to a Stardew Valley screenshot.
+    image_b64:
+        Base64-encoded PNG or JPEG screenshot bytes.
     debug:
         If True, print all OCR boxes and their relative Y positions.
 
     Returns
     -------
-    dict with keys: name, description, price_per_unit, quantity_selected, total_cost.
+    dict with keys: name, description, price_per_unit, quantity_selected,
+    total_cost, energy, health.
 
     Raises
     ------
     PanelNotFoundError
-        If the template match confidence is below 0.85.
+        If the template match confidence is below _MATCH_THRESHOLD.
     FileNotFoundError
         If the anchor template or pierre_panel_layout.json are missing.
+    ValueError
+        If the base64 data cannot be decoded to a valid image.
     """
-    image_path = Path(image_path)
-    if not image_path.exists():
-        raise FileNotFoundError(f"Screenshot not found: {image_path}")
-
     if not _TEMPLATE_FILE.exists():
         raise FileNotFoundError(
             f"Anchor template not found at {_TEMPLATE_FILE}. "
             "Run scripts/extract_anchor_template.py first."
         )
 
-    img = cv2.imread(str(image_path))
+    img_bytes = base64.b64decode(image_b64)
+    img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
     if img is None:
-        raise ValueError(f"Could not read image: {image_path}")
+        raise ValueError("Could not decode image from base64 data.")
 
     template = cv2.imread(str(_TEMPLATE_FILE))
     if template is None:
@@ -286,14 +327,11 @@ def crop_pierres_detail_panel(image_path: str | Path, debug: bool = False) -> di
     if panel_rel is None:
         raise KeyError("pierre_panel_layout.json missing 'panel_rel' key.")
 
-    # Locate the anchor corner to verify and scale
     rel_x, rel_y, rel_w, rel_h, scale, conf = locate_panel(img, template)
 
     if debug:
         print(f"Template match: confidence={conf:.3f}, scale={scale}, corner=({rel_x:.3f},{rel_y:.3f})")
 
-    # The detected (rel_x, rel_y) is the panel top-left corner.
-    # Scale only the panel dimensions (width/height) by the detected UI scale factor.
     scaled_w = panel_rel["w"] * scale
     scaled_h = panel_rel["h"] * scale
     full_rel_box = (rel_x, rel_y, scaled_w, scaled_h)
@@ -307,3 +345,19 @@ def crop_pierres_detail_panel(image_path: str | Path, debug: bool = False) -> di
             print(f"  rel_y={r['rel_y']:.3f}  score={r['score']:.3f}  text={r['text']!r}")
 
     return parse_pierre_fields(ocr_results)
+
+
+def crop_pierres_detail_panel_from_path(image_path: str | Path, debug: bool = False) -> dict:
+    """
+    Convenience wrapper for local development and testing.
+
+    Reads *image_path* from disk, encodes it to base64, and calls
+    crop_pierres_detail_panel(). Prefer this in scripts and tests; use
+    crop_pierres_detail_panel() directly in production (webapp dispatch layer).
+    """
+    image_path = Path(image_path)
+    if not image_path.exists():
+        raise FileNotFoundError(f"Screenshot not found: {image_path}")
+    with open(image_path, "rb") as f:
+        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+    return crop_pierres_detail_panel(image_b64, debug=debug)

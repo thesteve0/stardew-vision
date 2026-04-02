@@ -1,102 +1,130 @@
-# [Project Name]
+# Stardew Vision
 
-> Replace this with a one-sentence description of what this project does and why it exists.
+An accessibility tool that lets visually impaired Stardew Valley players upload a screenshot of an in-game UI panel and hear its contents read aloud. Built as a conference talk artifact demonstrating VLMs, agentic tool-calling, OCR, and TTS for practical accessibility use cases.
 
 ## Problem Statement
 
-Describe the problem this project solves. What question are you trying to answer? What business need does this address?
+Stardew Valley's UI text is small and rendered in pixel-art fonts. Players with vision impairments can read the game but struggle with small details — item names, prices, descriptions. They take a screenshot and want to hear those details narrated back to them.
+
+## How It Works
+
+FastAPI is the **agent runtime** — it manages the loop, executes tool calls, and holds state. Qwen2.5-VL-7B is the **reasoner** — it classifies the screen, calls extraction tools, checks for failures, applies corrections, assembles narration, and delegates to TTS.
+
+```
+User uploads screenshot
+  |
+  v
+FastAPI /analyze  (port 8000)
+  |
+  v
+Agent loop (Qwen2.5-VL-7B via vLLM, port 8001)
+  Turn 1: Qwen calls crop_pierres_detail_panel → OCR JSON
+  Turn 2: Qwen checks result, corrects typos, retries with debug=True if needed
+  Turn 3: Qwen calls text_to_speech → WAV
+  |
+  v
+Browser plays audio
+```
+
+See [`docs/adr/009-agent-tool-calling-architecture.md`](docs/adr/009-agent-tool-calling-architecture.md) for the full design.
 
 ## Dataset
 
-- **Data Source**: Where does the data come from? (e.g., public dataset, company database, web scraping)
-- **Size**: How much data? (e.g., "10GB of images", "1M text samples")
-- **Location**: Where is the data stored? (`./datasets/`, `/data/external-source`, etc.)
-
-If using external data mounted at `/data`, explain how to access it.
-
-## Methodology
-
-- **VLM orchestrator**: Qwen2.5-VL-7B-Instruct (FP16, LoRA fine-tuned) classifies the screenshot type and dispatches a tool call to the appropriate extraction agent.
-- **Extraction agents**: OpenCV crops the relevant UI region; PaddleOCR (PP-OCRv5) extracts text — chosen over EasyOCR for faster CPU throughput, SOTA accuracy, and capitalization preservation (see `docs/ocr-choice.md`).
-- **TTS**: MeloTTS synthesizes the extracted fields into a WAV narration.
-- **Web app**: FastAPI receives screenshot uploads and streams back audio.
+- **Source**: Screenshots taken from Stardew Valley gameplay (Pierre's shop, iPad + PC)
+- **Size**: 22 annotated Pierre's shop screenshots (Phase 1)
+- **Location**: `datasets/pierre_shop/` (host volume — not committed to git)
+- **Annotation schema**: JSONL with `image_id`, `screen_type`, `expected_extraction` fields
 
 ## Project Structure
 
 ```
-project-name/
-├── src/              # Source code for models, data processing, utilities
-├── configs/          # Configuration files (hyperparameters, paths, etc.)
-├── datasets/         # Training and evaluation data
-├── models/           # Trained model checkpoints
-├── notebooks/        # Jupyter notebooks for exploration and visualization
-├── tests/            # Unit and integration tests
-└── .cache/           # HuggingFace and PyTorch caches
+src/stardew_vision/
+  tools/        # Extraction agents: crop_pierres_detail_panel, etc.
+  tts/          # MeloTTS wrapper (text_to_speech tool)
+  serving/      # FastAPI agent loop (inference.py)
+  webapp/       # FastAPI app, routes, static HTML
+datasets/       # Host volume — screenshots, annotations, templates
+models/         # Host volume — base + fine-tuned LoRA checkpoints
+docs/adr/       # Architecture Decision Records (ADR-009 is the core design)
+configs/        # Training configs, output schemas
 ```
 
 ## Setup
 
-This project runs in a ROCm devcontainer. Prerequisites and setup are already complete if you're reading this inside the container.
+This project runs in a ROCm devcontainer on AMD Strix Halo hardware.
 
-**First-time setup** (if not already done):
-1. Clone this repository
-2. Open in VSCode and reopen in container (or use JetBrains Gateway)
-3. Wait for container build and environment setup to complete
-
-**Install project dependencies**:
 ```bash
-# Add your dependencies to pyproject.toml dependencies section
-# Then run:
+# Install project dependencies
 uv sync
+
+# NEVER use pip install — it will overwrite the ROCm PyTorch build
 ```
+
+**Hardware**: AMD Strix Halo (gfx1151), ROCm 7.2, PyTorch 2.9.1, FP16 only.
 
 ## Usage
 
-### Training
+### Run extraction tool on a screenshot (local dev)
+
 ```bash
-# Replace with your actual training command
-python src/train.py --config configs/training.yaml
+python main.py --image datasets/pierre_shop/IMG_7708.jpg --debug
 ```
 
-### Inference
+### Run tests
+
 ```bash
-# Replace with your actual inference command
-python src/inference.py --model models/best-model.pth --input data/sample.jpg
+pytest tests/
+pytest tests/test_tools.py -v
 ```
 
-### Jupyter Notebooks
+### Start vLLM server (Qwen orchestrator)
+
 ```bash
-# Launch Jupyter (if configured)
-jupyter lab
+vllm serve models/fine-tuned/qwen25vl-stardew-v1 \
+  --dtype float16 \
+  --port 8001 \
+  --served-model-name stardew-vision-vlm
 ```
 
-## Results
+### Start web app
 
-Document your findings here:
-- Model performance metrics (accuracy, F1, loss curves, etc.)
-- Key insights from data analysis
-- Visualizations and plots (consider adding to `results/` directory)
-- Links to experiment tracking (MLflow, W&B, etc.)
+```bash
+uvicorn src.stardew_vision.webapp.app:app --port 8000
+```
+
+Then open `http://localhost:8000` and upload a Pierre's shop screenshot.
+
+## Status
+
+| Component | Status |
+|-----------|--------|
+| Pierre's shop OCR extraction | Complete — 93% field accuracy |
+| Agent loop (FastAPI + Qwen) | In progress |
+| TTS tool (MeloTTS) | Not started |
+| Web app | Not started |
+| Fine-tuning (LoRA) | Not started |
+
+See [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) for full detail.
+
+## Key Technical Decisions
+
+| Decision | Choice |
+|----------|--------|
+| VLM orchestrator | Qwen2.5-VL-7B-Instruct (FP16, LoRA) |
+| Agent loop | Raw OpenAI client — no framework |
+| OCR | PaddleOCR PP-OCRv5, CPU-only |
+| TTS | MeloTTS-English, CPU |
+| Serving | vLLM (local) + KServe on OpenShift AI |
+| Precision | FP16 only — ROCm 7.2 constraint |
+
+Full rationale in [`docs/adr/`](docs/adr/).
 
 ## Known Issues
 
-List any known limitations, bugs, or areas for improvement.
-
-## Contributing
-
-If this is a team project, describe:
-- How to submit changes (PR process, code review requirements)
-- Coding standards (linting, formatting, testing requirements)
-- Branch naming conventions
-
-## License
-
-Specify your license or "Proprietary" if not open source.
-
-## Acknowledgments
-
-Credit data sources, pre-trained models, papers, or team members.
+- **PaddlePaddle version**: Must use `paddlepaddle==3.2.0`. Version 3.3.0 has an OneDNN PIR bug that breaks CPU inference.
+- **FP16 only**: No BF16, INT4, or INT8 on this hardware.
+- `datasets/` and `models/` are host volumes — not in git.
 
 ---
 
-**Template Info**: This project was created from [datascience-template-ROCm](https://github.com/thesteve0/datascience-template-ROCm). For ROCm setup, troubleshooting, or template infrastructure details, see `template_docs/`.
+**Template Info**: Created from [datascience-template-ROCm](https://github.com/thesteve0/datascience-template-ROCm). For ROCm setup details, see `template_docs/`.

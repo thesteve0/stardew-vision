@@ -9,9 +9,9 @@ def main():
     args = parser.parse_args()
 
     if args.image:
-        from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel
+        from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
-        result = crop_pierres_detail_panel(args.image, debug=args.debug)
+        result = crop_pierres_detail_panel_from_path(args.image, debug=args.debug)
         print(json.dumps(result, indent=2))
     else:
         print("Hello from stardew-vision!")

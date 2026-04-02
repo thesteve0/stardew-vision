@@ -2,19 +2,16 @@
 
 ## Executive Summary
 
-**Decision**: Use **Smolagents** as the primary agent framework for Stardew Vision
+**Decision (updated 2026-04-02)**: Use **raw OpenAI client** — no agent framework for MVP
 
 **Rationale**:
-- ✅ First-class VLM support (vision, video, audio)
-- ✅ Model-agnostic (works with Qwen2.5-VL via transformers OR vLLM)
-- ✅ Minimal overhead (~1000 lines of code, simple abstractions)
-- ✅ CodeAgent paradigm (writes Python code to call tools - matches "manual first" philosophy)
-- ✅ Hub integrations (share tools as Spaces for conference demos)
-- ✅ Sandboxed execution (security via Modal, E2B, Docker)
-- ✅ CLI tools for quick testing (`smolagent`, `webagent`)
-- ✅ Fits single-shot AND complex workflows (MVP to Phase 2+)
+- The agentic loop is at most 4 turns with predictable structure — no framework needed
+- Full control over loop logic, error handling, and error logging
+- No abstraction layer between our code and vLLM's tool-calling implementation
+- Easier to debug, easier to explain in the conference talk
+- Can adopt a framework (Smolagents, LangGraph) in Phase 2+ if complexity grows
 
-**Alternative for maximum control**: Raw OpenAI client (no framework abstraction)
+**Previous recommendation**: Smolagents (still valid if multi-agent or Hub integrations become priorities — see analysis below)
 
 ---
 
@@ -363,29 +360,30 @@ Based on March 2026 research:
 
 ## Decision for Stardew Vision
 
-### MVP (Phase 1): Smolagents
+### MVP (Phase 1): Raw OpenAI Client
 
 **Architecture**:
 ```
-User upload → FastAPI /analyze
+User upload → FastAPI /analyze  (FastAPI = agent runtime)
   ↓
-VLMOrchestrator (Smolagents CodeAgent + Qwen2.5-VL-7B)
-  Classifies screen type & writes Python code to call tool
+Multi-turn loop (raw openai.AsyncOpenAI → vLLM port 8001)
+  Turn 1: Qwen calls crop_pierres_detail_panel
+  Turn 2: Qwen checks result, corrects typos, may retry with debug=True
+  Turn 3: Qwen calls text_to_speech
   ↓
-CropPierresPanelTool (Smolagents Tool wrapper) → structured JSON
-  ↓
-MeloTTS → WAV → return to user
+FastAPI streams WAV → browser
 ```
 
-**Why Smolagents**:
-- VLM-first design (handles images natively)
-- Model-agnostic (Qwen2.5-VL via transformers or vLLM)
-- CodeAgent paradigm (matches "manual first" philosophy)
-- Hub integrations (conference demo friendly)
-- Minimal complexity for MVP
-- Scales to complex workflows (Phase 2+)
+**Why raw OpenAI client**:
+- Loop is simple (≤4 turns, predictable structure) — no framework pays off
+- Full control over error logging, image saving, tool injection
+- No abstraction layer that might conflict with vLLM's tool-calling implementation
+- Maximally transparent for conference talk — audience can read the code
 
-**Alternative**: Raw OpenAI client if maximum control preferred
+**When to revisit (Phase 2+)**:
+- If routing grows complex (multiple screen types with conditional branching) → consider LangGraph
+- If multi-agent validation is added → consider Smolagents managed_agents or CrewAI
+- If Hub tool sharing becomes a priority → Smolagents
 
 ### Phase 2: Multi-Screen Support
 
