@@ -1,14 +1,29 @@
 # Stardew Vision: Project Plan
 
-**Last updated**: 2026-04-02
+**Last updated**: 2026-04-03
 **Talk deadline**: ~1 month
-**Status**: Phase 1 extraction tool complete (93% field accuracy). Agentic loop architecture finalized. Next: build the loop.
+**Status**: Phase 1 extraction tool complete (93% field accuracy, 9/9 tests passing). Agentic loop fully wired (FastAPI + Qwen via vLLM). Pending: live test on desktop, then wire real TTS, then fine-tuning.
 
-**NEXT SESSION**: Build the agent loop
-- Step 1: Add `ocr_raw` structured debug output to `crop_pierres_detail_panel`
-- Step 2: Write `text_to_speech` tool wrapper (MeloTTS)
-- Step 3: Write FastAPI agent loop in `src/stardew_vision/serving/inference.py`
-- Step 4: Test Qwen zero-shot on Pierre's shop screenshot
+**NEXT SESSION**: Live test the agent loop
+- Step 1: Start vLLM + FastAPI on desktop (see vLLM start command below)
+- Step 2: POST `tests/fixtures/pierre_shop_001.png` to `/analyze`
+- Step 3: Verify Qwen calls `crop_pierres_detail_panel`, then `text_to_speech`, narration in response
+- Step 4: See `docs/TESTING_AGENT_LOOP.md` for full instructions
+- Step 5 (after loop verified): Wire real MeloTTS → replace TTS stub in `src/stardew_vision/tts/synthesize.py`
+- Step 6: Switch `/analyze` to return `audio/wav`
+- Step 7: Fine-tuning (urgent) — collect multi-screen-type data, fine-tune Qwen on screen classification + tool dispatch
+
+## vLLM Start Command
+
+```bash
+vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
+  --dtype float16 \
+  --port 8001 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes
+```
+
+If tool calls don't fire, try `--tool-call-parser qwen2_5`.
 
 This is the authoritative project plan. It is referenced from `CLAUDE.md`. Update this document as decisions change; use the ADRs in `docs/adr/` to document *why* each decision was made.
 
@@ -210,7 +225,8 @@ Full detail in `docs/data-collection-plan.md`.
 **Annotation schema**:
 ```json
 {
-  "image_id": "uuid4",
+  "image_hash": "<sha256>",
+  "original_file_name": "pierre_shop_001.png",
   "screen_type": "pierre_shop",
   "expected_extraction": {
     "name": "Parsnip Seeds",
@@ -222,7 +238,9 @@ Full detail in `docs/data-collection-plan.md`.
 }
 ```
 
-**Dataset splits**: 70% train / 15% val / 15% test. Test set = held-out screenshots not used in training.
+Note: `image_hash` is SHA256 (content-based ID), not UUID4. `original_file_name` is required for traceability.
+
+**Dataset splits**: 65% train / 20% val / 15% test. Test set must include images where left panel selection ≠ right panel detail (critical edge case — use `--manual-test-images` in `scripts/generate_splits.py`). Split manifests are plain `.txt` files in `datasets/splits/pierre_shop/` — one filename per line (not JSONL). Training code joins against `datasets/annotated/annotations.jsonl`.
 
 ---
 
@@ -307,13 +325,13 @@ Key differences:
 4. ✅ Build anchor template: `datasets/assets/templates/pierres_detail_panel_corner.png` (2026-03-20)
 5. ✅ Write `src/stardew_vision/tools/crop_pierres_detail_panel.py` (OpenCV crop + PaddleOCR + parser) (2026-03-20)
 6. ✅ Write unit tests: `tests/test_tools.py` with fixture screenshots (8/8 tests passing) (2026-03-20)
-7. Add `ocr_raw` structured debug output to `crop_pierres_detail_panel` (debug=True mode)
-8. Write `src/stardew_vision/tts/synthesize.py` (MeloTTS wrapper)
-9. Write `src/stardew_vision/serving/inference.py` (FastAPI agent loop: raw OpenAI client, multi-turn dispatch, error logging)
-10. Write tool definitions in OpenAI function-calling format (`src/stardew_vision/tools/__init__.py`)
-11. Run zero-shot baseline: does Qwen2.5-VL-7B run the full loop correctly zero-shot?
+7. ✅ Add `ocr_raw` structured debug output to `crop_pierres_detail_panel` (debug=True mode) (2026-04-03)
+8. 🔄 Write `src/stardew_vision/tts/synthesize.py` (MeloTTS wrapper) — **stubbed, not wired**
+9. ✅ Write `src/stardew_vision/serving/inference.py` (FastAPI agent loop: raw OpenAI client, multi-turn dispatch, error logging) (2026-04-03)
+10. ✅ Write tool definitions in OpenAI function-calling format (`src/stardew_vision/tools/__init__.py`) — `image_b64` NOT in definitions, FastAPI injects at dispatch (2026-04-03)
+11. 🔄 Run zero-shot baseline: does Qwen2.5-VL-7B run the full loop correctly zero-shot? (**NOT YET TESTED — desktop**)
 12. Fine-tune orchestrator on multi-turn conversation training data; log to MLFlow
-13. Write `src/stardew_vision/webapp/app.py` + `routes.py` + `index.html`
+13. ✅ Write `src/stardew_vision/webapp/app.py` + `routes.py` + `index.html` (2026-04-03)
 14. End-to-end integration test: upload Pierre's shop screenshot → audio plays
 15. Add ports 8000, 8001 to `devcontainer.json` `forwardPorts`
 
@@ -400,11 +418,14 @@ Both managed via `scripts/push_to_hf.py`. Model card auto-generated from MLFlow 
 The MVP is working when all of the following pass:
 
 - [x] `src/stardew_vision/tools/crop_pierres_detail_panel.py` extracts correct fields from a fixture screenshot (2026-03-20)
-- [x] `pytest tests/test_tools.py` — all extraction unit tests pass (8/8 passing, 2026-03-20)
-- [ ] Zero-shot orchestrator runs full agentic loop (extract → check → correct → TTS) for a Pierre's shop screenshot
+- [x] `pytest tests/test_tools.py` — all extraction unit tests pass (9/9 passing, 2026-04-03)
+- [x] Agent loop files created and import-verified: `tools/__init__.py`, `serving/inference.py`, `webapp/app.py`, `webapp/routes.py`, `webapp/static/index.html` (2026-04-03)
+- [ ] Zero-shot orchestrator runs full agentic loop (extract → check → correct → TTS) for a Pierre's shop screenshot (**next**)
+- [ ] Real MeloTTS wired in `src/stardew_vision/tts/synthesize.py`; TTS stub replaced
+- [ ] `/analyze` returns `audio/wav` (currently returns JSON)
 - [ ] Fine-tuned orchestrator: screen classification accuracy >= 95%, correction accuracy >= 80% on validation set
-- [x] Field extraction accuracy >= 90% on Pierre's shop validation screenshots (85-99% OCR confidence, 2026-03-20)
-- [ ] `vllm serve models/fine-tuned/...` starts on port 8001 with tool-calling enabled
+- [x] Field extraction accuracy >= 90% on Pierre's shop validation screenshots (93% across 22 images, 2026-04-03)
+- [ ] `vllm serve Qwen/Qwen2.5-VL-7B-Instruct --dtype float16 --port 8001 --enable-auto-tool-choice --tool-call-parser hermes` starts
 - [ ] `uvicorn src.stardew_vision.webapp.app:app --port 8000` starts
 - [ ] Browser upload of a Pierre's shop screenshot → audio plays with correct item description
-- [x] `pytest tests/` — all tests pass (8/8 tests passing, 2026-03-20)
+- [x] `pytest tests/` — all tests pass (9/9 tests passing, 2026-04-03)
