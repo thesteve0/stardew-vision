@@ -135,7 +135,7 @@ def test_locate_panel_finds_match():
 
 @_fixture_skip()
 def test_extract_returns_required_keys():
-    """Full extraction returns all required keys."""
+    """Full extraction returns all required keys (no ocr_raw in normal mode)."""
     from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
     result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT)
@@ -153,6 +153,26 @@ def test_field_types():
     assert isinstance(result["price_per_unit"], int)
     assert isinstance(result["quantity_selected"], int)
     assert isinstance(result["total_cost"], int)
+
+
+@_fixture_skip()
+def test_debug_mode_includes_ocr_raw():
+    """debug=True adds ocr_raw list to the returned dict; normal keys still present."""
+    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
+
+    result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT, debug=True)
+    assert "ocr_raw" in result
+    assert isinstance(result["ocr_raw"], list)
+    assert len(result["ocr_raw"]) > 0
+
+    first = result["ocr_raw"][0]
+    assert {"text", "score", "rel_y"} <= set(first.keys())
+    assert isinstance(first["text"], str)
+    assert isinstance(first["score"], float)
+    assert isinstance(first["rel_y"], float)
+
+    # Normal fields still present
+    assert "name" in result and "price_per_unit" in result
 
 
 @_fixture_skip()

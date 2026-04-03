@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stardew Vision</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; background: #fafafa; }
+    h1 { color: #2e7d32; margin-bottom: 0.25rem; }
+    p.subtitle { color: #555; margin-top: 0; }
+    form { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem; }
+    input[type=file] { font-size: 1rem; }
+    button {
+      align-self: flex-start; padding: 0.6rem 1.4rem; font-size: 1rem;
+      background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer;
+    }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #status { margin-top: 1rem; font-style: italic; color: #555; }
+    #result { margin-top: 1.5rem; display: none; }
+    #error-banner {
+      background: #ffebee; color: #c62828; padding: 0.75rem 1rem;
+      border-radius: 4px; margin-bottom: 1rem; display: none;
+    }
+    h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin-bottom: 0.4rem; }
+    #narration { font-size: 1.1rem; background: #f5f5f5; padding: 1rem; border-radius: 4px; line-height: 1.5; }
+    #fields-block {
+      font-family: monospace; font-size: 0.9rem; background: #e8f5e9;
+      padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <h1>Stardew Vision</h1>
+  <p class="subtitle">Upload a Stardew Valley screenshot to hear the UI panel narrated.</p>
+
+  <form id="upload-form">
+    <input id="file-input" type="file" accept="image/*" required>
+    <button id="submit-btn" type="submit">Analyze Screenshot</button>
+  </form>
+
+  <div id="status"></div>
+
+  <div id="result">
+    <div id="error-banner"></div>
+    <h2>Narration</h2>
+    <div id="narration"></div>
+    <h2 style="margin-top:1.25rem">Extracted Fields</h2>
+    <pre id="fields-block"></pre>
+  </div>
+
+  <script>
+    const form = document.getElementById('upload-form');
+    const statusEl = document.getElementById('status');
+    const resultEl = document.getElementById('result');
+    const narrationEl = document.getElementById('narration');
+    const errorBanner = document.getElementById('error-banner');
+    const fieldsEl = document.getElementById('fields-block');
+    const submitBtn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = document.getElementById('file-input').files[0];
+      if (!file) return;
+
+      submitBtn.disabled = true;
+      statusEl.textContent = 'Analyzing…';
+      resultEl.style.display = 'none';
+      errorBanner.style.display = 'none';
+
+      const fd = new FormData();
+      fd.append('file', file);
+
+      try {
+        const resp = await fetch('/analyze', { method: 'POST', body: fd });
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`Server error ${resp.status}: ${txt}`);
+        }
+        const data = await resp.json();
+
+        narrationEl.textContent = data.narration || '(no narration returned)';
+        fieldsEl.textContent = JSON.stringify(data.fields, null, 2);
+
+        if (data.has_errors) {
+          errorBanner.textContent = 'Extraction had unresolvable errors — screenshot saved for review.';
+          errorBanner.style.display = 'block';
+        }
+
+        statusEl.textContent = '';
+        resultEl.style.display = 'block';
+      } catch (err) {
+        statusEl.textContent = 'Error: ' + err.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -290,12 +290,16 @@ def crop_pierres_detail_panel(image_b64: str, debug: bool = False) -> dict:
     image_b64:
         Base64-encoded PNG or JPEG screenshot bytes.
     debug:
-        If True, print all OCR boxes and their relative Y positions.
+        If True, include ``ocr_raw`` in the returned dict — a list of
+        ``{text, score, rel_y}`` dicts in reading order (sorted by rel_y).
+        Use this when the VLM needs to reason about raw OCR output to
+        diagnose or correct extraction failures.
 
     Returns
     -------
     dict with keys: name, description, price_per_unit, quantity_selected,
     total_cost, energy, health.
+    When debug=True, also includes: ocr_raw (list[dict]).
 
     Raises
     ------
@@ -329,9 +333,6 @@ def crop_pierres_detail_panel(image_b64: str, debug: bool = False) -> dict:
 
     rel_x, rel_y, rel_w, rel_h, scale, conf = locate_panel(img, template)
 
-    if debug:
-        print(f"Template match: confidence={conf:.3f}, scale={scale}, corner=({rel_x:.3f},{rel_y:.3f})")
-
     scaled_w = panel_rel["w"] * scale
     scaled_h = panel_rel["h"] * scale
     full_rel_box = (rel_x, rel_y, scaled_w, scaled_h)
@@ -339,12 +340,12 @@ def crop_pierres_detail_panel(image_b64: str, debug: bool = False) -> dict:
     panel_crop = crop_panel(img, full_rel_box)
     ocr_results = run_ocr(panel_crop)
 
-    if debug:
-        print("OCR results (sorted by rel_y):")
-        for r in sorted(ocr_results, key=lambda x: x["rel_y"]):
-            print(f"  rel_y={r['rel_y']:.3f}  score={r['score']:.3f}  text={r['text']!r}")
+    fields = parse_pierre_fields(ocr_results)
 
-    return parse_pierre_fields(ocr_results)
+    if debug:
+        fields["ocr_raw"] = sorted(ocr_results, key=lambda r: r["rel_y"])
+
+    return fields
 
 
 def crop_pierres_detail_panel_from_path(image_path: str | Path, debug: bool = False) -> dict:
