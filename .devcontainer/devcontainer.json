@@ -34,7 +34,8 @@
     // Wayland socket forwarding — mount host socket into container.
     // Host socket lives at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY (e.g. /run/user/1000/wayland-0).
     // We mount it to /tmp/$WAYLAND_DISPLAY so it's accessible regardless of XDG_RUNTIME_DIR permissions.
-    "--volume=/run/user/1000/wayland-0:/tmp/wayland-0"
+    "--volume=/run/user/1000/wayland-0:/tmp/wayland-0",
+    "--add-host=host.docker.internal:host-gateway"
   ],
 
   "containerEnv": {
@@ -55,7 +56,8 @@
     "VIRTUAL_ENV": "${containerWorkspaceFolder}/.venv",
     "ANTHROPIC_VERTEX_PROJECT_ID": "${localEnv:ANTHROPIC_VERTEX_PROJECT_ID}",
     "ANTHROPIC_VERTEX_REGION": "${localEnv:ANTHROPIC_VERTEX_REGION}",
-    "CLAUDE_CODE_USE_VERTEX": "${localEnv:CLAUDE_CODE_USE_VERTEX}"
+    "CLAUDE_CODE_USE_VERTEX": "${localEnv:CLAUDE_CODE_USE_VERTEX}",
+    "VLLM_BASE_URL": "http://host.docker.internal:8001/v1"
   },
 
   // No volume mounts needed - VSCode bind-mounts the entire workspace folder by default.
@@ -108,7 +110,7 @@
     }
   },
 
-  "forwardPorts": [6006, 8888],
+  "forwardPorts": [6006, 8888, 8000, 8001],
 
   "postCreateCommand": ".devcontainer/setup-environment.sh",
 

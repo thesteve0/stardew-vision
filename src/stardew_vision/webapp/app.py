@@ -1,9 +1,20 @@
 """FastAPI application entrypoint for Stardew Vision."""
 
+import logging
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+
+# Uvicorn only configures its own loggers; attach a handler directly so
+# stardew_vision.* output always reaches the terminal.
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s — %(message)s"))
+_sv_logger = logging.getLogger("stardew_vision")
+_sv_logger.addHandler(_handler)
+_sv_logger.setLevel(logging.DEBUG)
+_sv_logger.propagate = False
 
 from stardew_vision.webapp import routes
 

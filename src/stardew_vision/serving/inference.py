@@ -140,19 +140,29 @@ async def run_agent_loop(image_b64: str) -> dict:
     has_errors: bool = False
 
     for turn in range(MAX_TURNS):
-        logger.debug("Agent turn %d/%d", turn + 1, MAX_TURNS)
+        logger.info("=== Agent turn %d/%d ===", turn + 1, MAX_TURNS)
+
+        # Force the extraction tool on turn 1; let Qwen decide freely after.
+        tool_choice = (
+            {"type": "function", "function": {"name": "crop_pierres_detail_panel"}}
+            if turn == 0
+            else "auto"
+        )
 
         response = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages,
             tools=TOOL_DEFINITIONS,
+            tool_choice=tool_choice,
         )
 
         choice = response.choices[0]
         msg = choice.message
+        logger.info("finish_reason=%s tool_calls=%s content=%r",
+                    choice.finish_reason, msg.tool_calls, msg.content)
         messages.append(msg.model_dump(exclude_none=True))
 
-        if choice.finish_reason == "tool_calls" and msg.tool_calls:
+        if msg.tool_calls:
             for tc in msg.tool_calls:
                 name = tc.function.name
                 try:

@@ -1,4 +1,4 @@
-# ROCm PyTorch ML Development Container
+It lo# ROCm PyTorch ML Development Container
 # Base: Official AMD ROCm PyTorch image (Ubuntu 24.04)
 FROM rocm/pytorch:rocm7.2_ubuntu24.04_py3.12_pytorch_release_2.9.1
 

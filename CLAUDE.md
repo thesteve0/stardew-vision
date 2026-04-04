@@ -135,6 +135,60 @@ See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 **Note**: This is a ROCm devcontainer project. For ROCm-specific troubleshooting (GPU access, dependency conflicts, Python version issues), see `template_docs/CLAUDE.md`.
 For now we are using ROCm 7.2  - please make sure to read [notesOnRocm72.md](template_docs/notesOnRocm72.md) to understand some of the best practices when working on AMD Strix Halo and Point computers
 
+## Local Development Architecture
+
+**vLLM Serving (on host machine):**
+- vLLM runs in a Docker container on the **host machine** (not in devcontainer)
+- Uses AMD image: `rocm/vllm:rocm7.12.0_gfx1151_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0`
+- We tested `vllm/vllm-openai-rocm:nightly` (0.19) but reverted — the V1 engine it uses has a known OOM bug on gfx1151 during encoder profiling (vllm-project/vllm#37472, fix in PR #38555 unmerged). See `docs/vllm-notes.md`.
+- Serves Qwen2.5-VL-7B-Instruct on port 8001
+- Why host: Avoids vLLM ROCm compatibility issues inside devcontainer, uses native GPU access
+
+**FastAPI Webapp (in devcontainer):**
+- Runs inside devcontainer on port 8000
+- Connects to vLLM at `http://localhost:8001/v1` (via forwarded port)
+- Manages agent loop, executes extraction tools, returns audio
+
+### Starting vLLM Server (on host)
+
+Use `scripts/start_vllm_host.sh` or run directly:
+
+```bash
+# Run this on your host machine (outside devcontainer)
+docker run --rm \
+  --device=/dev/kfd \
+  --device=/dev/dri \
+  --group-add=video \
+  --cap-add=SYS_PTRACE \
+  --security-opt seccomp=unconfined \
+  --ipc=host \
+  -p 8001:8000 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -v "${PWD}/configs/serving/qwen2_5_vl_tool_template.jinja":/chat_template.jinja \
+  -e HF_TOKEN=$HF_TOKEN \
+  rocm/vllm:rocm7.12.0_gfx1151_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0 \
+  vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
+  --dtype float16 \
+  --port 8000 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes \
+  --chat-template /chat_template.jinja
+```
+
+**Startup time:** ~5-8 minutes (model loading + encoder cache profiling)
+
+**Test from host:**
+```bash
+curl http://localhost:8001/v1/models
+```
+
+**Test from devcontainer (after rebuild with forwarded ports):**
+```bash
+curl http://localhost:8001/v1/models
+```
+
+Expected response: JSON with model info including `"id": "Qwen/Qwen2.5-VL-7B-Instruct"`
+
 ## Overall intstructions
 ## Bash Conventions
 - Do not append `| tail -N` or `| head -N` to commands unless the output is expected to exceed 500 lines

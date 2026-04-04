@@ -2,28 +2,56 @@
 
 **Last updated**: 2026-04-03
 **Talk deadline**: ~1 month
-**Status**: Phase 1 extraction tool complete (93% field accuracy, 9/9 tests passing). Agentic loop fully wired (FastAPI + Qwen via vLLM). Pending: live test on desktop, then wire real TTS, then fine-tuning.
+**Status**: Phase 1 extraction tool complete (93% field accuracy, 9/9 tests passing). Agentic loop fully wired (FastAPI + Qwen via vLLM). vLLM server running on host machine. **CURRENT**: Testing agent loop end-to-end.
 
-**NEXT SESSION**: Live test the agent loop
-- Step 1: Start vLLM + FastAPI on desktop (see vLLM start command below)
-- Step 2: POST `tests/fixtures/pierre_shop_001.png` to `/analyze`
-- Step 3: Verify Qwen calls `crop_pierres_detail_panel`, then `text_to_speech`, narration in response
-- Step 4: See `docs/TESTING_AGENT_LOOP.md` for full instructions
-- Step 5 (after loop verified): Wire real MeloTTS → replace TTS stub in `src/stardew_vision/tts/synthesize.py`
-- Step 6: Switch `/analyze` to return `audio/wav`
-- Step 7: Fine-tuning (urgent) — collect multi-screen-type data, fine-tune Qwen on screen classification + tool dispatch
+**CURRENT SESSION**: Live test the agent loop
+- ✅ Step 1: Start vLLM on host (running in Docker container)
+- 🔄 Step 2: Rebuild devcontainer with forwarded ports (8000, 8001)
+- 🔄 Step 3: Start FastAPI webapp in devcontainer
+- 🔄 Step 4: POST `tests/fixtures/pierre_shop_001.png` to `/analyze`
+- 🔄 Step 5: Verify Qwen calls `crop_pierres_detail_panel`, then `text_to_speech`, narration in response
+- Step 6 (after loop verified): Wire real MeloTTS → replace TTS stub in `src/stardew_vision/tts/synthesize.py`
+- Step 7: Switch `/analyze` to return `audio/wav`
+- Step 8: Fine-tuning (urgent) — collect multi-screen-type data, fine-tune Qwen on screen classification + tool dispatch
 
-## vLLM Start Command
+## vLLM Start Command (Run on Host Machine)
+
+**Architecture Decision (2026-04-03):** vLLM runs in Docker container on the **host machine** (not in devcontainer) due to gfx1151 (Strix Halo) ROCm compatibility. The devcontainer connects to vLLM via forwarded port 8001.
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
+# Run this on your host machine (outside devcontainer)
+docker run --rm \
+  --device=/dev/kfd \
+  --device=/dev/dri \
+  --group-add=video \
+  --cap-add=SYS_PTRACE \
+  --security-opt seccomp=unconfined \
+  --ipc=host \
+  -p 8001:8000 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -e HF_TOKEN=$HF_TOKEN \
+  rocm/vllm:rocm7.12.0_gfx1151_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0 \
+  vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --dtype float16 \
-  --port 8001 \
+  --port 8000 \
   --enable-auto-tool-choice \
   --tool-call-parser hermes
 ```
 
-If tool calls don't fire, try `--tool-call-parser qwen2_5`.
+**Startup time:** ~5-8 minutes (model loading + encoder cache profiling for VLM)
+
+**Test server is running:**
+```bash
+# From host
+curl http://localhost:8001/v1/models
+
+# From devcontainer (after rebuild with forwarded ports)
+curl http://localhost:8001/v1/models
+```
+
+Expected response: JSON with `"id": "Qwen/Qwen2.5-VL-7B-Instruct"`
+
+If tool calls don't fire during testing, try `--tool-call-parser qwen2_5`.
 
 This is the authoritative project plan. It is referenced from `CLAUDE.md`. Update this document as decisions change; use the ADRs in `docs/adr/` to document *why* each decision was made.
 
