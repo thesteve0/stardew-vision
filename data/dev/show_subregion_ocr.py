@@ -15,8 +15,6 @@ from pathlib import Path
 
 import cv2
 
-sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
-
 from stardew_vision.tools.crop_pierres_detail_panel import _load_ocr
 
 if len(sys.argv) < 4:

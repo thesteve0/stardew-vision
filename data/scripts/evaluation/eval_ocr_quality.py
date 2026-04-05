@@ -17,8 +17,6 @@ from pathlib import Path
 
 import cv2
 
-sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
-
 from stardew_vision.tools.crop_pierres_detail_panel import parse_pierre_fields, run_ocr
 
 CROPS_DIR = Path(__file__).parents[1] / "datasets" / "debug_crops" / "pierre_shop"

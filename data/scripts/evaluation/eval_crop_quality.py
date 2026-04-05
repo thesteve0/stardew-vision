@@ -15,8 +15,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
-
 from stardew_vision.tools.crop_pierres_detail_panel import _MATCH_SCALES, crop_panel
 
 IMAGES_DIR = Path(__file__).parents[1] / "datasets" / "pierre_shop" / "images"

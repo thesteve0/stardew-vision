@@ -27,11 +27,6 @@ This file provides context to Claude Code when working on this project.
 ## Codebase Structure
 
 ```
-scripts/    # Experiment scripts and data collection utilities
-datasets/   # Host volume — screenshots, annotations, OpenCV anchor templates
-models/     # Host volume — base + fine-tuned LoRA checkpoints
-configs/    # Training configs, output schemas, OpenShift serving manifests
-docs/       # ADRs, plan, data-collection-plan, evaluation rubric
 src/
 └── stardew_vision/
     ├── tools/       # Extraction agents: crop_pierres_detail_panel, crop_tv_dialog, etc.
@@ -39,6 +34,19 @@ src/
     ├── tts/         # MeloTTS synthesize.py
     ├── serving/     # vLLM OpenAI-client wrapper + tool dispatch logic
     └── webapp/      # FastAPI app, routes, static HTML
+data/
+├── scripts/
+│   ├── annotation/  # Annotation generation + review tools
+│   ├── evaluation/  # OCR and template matching quality metrics
+│   └── visualization/ # Sprite browser, annotation viewer
+└── dev/             # Debug and smoke-test scripts
+demos/               # Conference demo examples (agent-learning modules)
+training/            # Placeholder — will become stardew-vision-training repo
+deploy/              # Deployment scripts and manifests (start_vllm_host.sh, docker-compose)
+datasets/            # Host volume — screenshots, annotations, OpenCV anchor templates
+models/              # Host volume — base + fine-tuned LoRA checkpoints
+configs/             # Output schemas, OpenShift serving manifests
+docs/                # ADRs, plan, data-collection-plan, evaluation rubric
 ```
 
 **Key files**:
@@ -52,10 +60,13 @@ Main model architecture
 
 ```bash
 # Run extraction tool on a screenshot
-python scripts/test_extraction_tool.py
+python data/dev/test_extraction_tool.py
 
 # Test OCR output
-python scripts/test_ocr_on_panel.py
+python data/dev/test_ocr_on_panel.py
+
+# Start vLLM server (on host machine, outside devcontainer)
+bash deploy/start_vllm_host.sh
 ```
 
 **Testing**:
@@ -151,7 +162,7 @@ For now we are using ROCm 7.2  - please make sure to read [notesOnRocm72.md](tem
 
 ### Starting vLLM Server (on host)
 
-Use `scripts/start_vllm_host.sh` or run directly:
+Use `deploy/start_vllm_host.sh` or run directly:
 
 ```bash
 # Run this on your host machine (outside devcontainer)

@@ -115,7 +115,9 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/vllm-project/vllm/main/vllm/v1/worker/gpu_model_runner.py\")",
       "Bash(curl:*)",
       "Bash(python3 -c ':*)",
-      "WebFetch(domain:hub.docker.com)"
+      "WebFetch(domain:hub.docker.com)",
+      "Bash(wc:*)",
+      "Bash(git mv:*)"
     ]
   }
 }

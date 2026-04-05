@@ -21,9 +21,6 @@ import jsonschema
 from PIL import Image
 from rapidfuzz import fuzz
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 from stardew_vision.tools.crop_pierres_detail_panel import (
     PanelNotFoundError,
     crop_pierres_detail_panel,

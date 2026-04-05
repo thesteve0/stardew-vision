@@ -14,9 +14,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 from PIL import Image
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 
 class ScreenshotVerifier:
     """Verify and analyze UI reference screenshots."""
