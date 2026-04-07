@@ -8,7 +8,7 @@ Stardew Valley's UI text is small and rendered in pixel-art fonts. Players with 
 
 ## How It Works
 
-FastAPI is the **agent runtime** — it manages the loop, executes tool calls, and holds state. Qwen2.5-VL-7B is the **reasoner** — it classifies the screen, calls extraction tools, checks for failures, applies corrections, assembles narration, and delegates to TTS.
+FastAPI is the **agent runtime** — it manages the loop, executes tool calls, holds state, and calls TTS. Qwen2.5-VL-7B is the **reasoner** — it classifies the screen, calls the appropriate OCR extraction tool if one exists, validates and corrects the result, and returns a structured JSON response.
 
 ```
 User uploads screenshot
@@ -18,15 +18,22 @@ FastAPI /analyze  (port 8000)
   |
   v
 Agent loop (Qwen2.5-VL-7B via vLLM, port 8001)
-  Turn 1: Qwen calls crop_pierres_detail_panel → OCR JSON
-  Turn 2: Qwen checks result, corrects typos, retries with debug=True if needed
-  Turn 3: Qwen calls text_to_speech → WAV
+  Turn 1: Qwen sees screenshot — does it match a known tool?
+    • Recognized screen → tool_call: crop_pierres_detail_panel → OCR JSON returned to Qwen
+    • Unrecognized screen → Qwen returns JSON immediately (no tool call)
+  Turn 2 (if tool was called): Qwen reviews OCR result, silently corrects typos,
+    returns final JSON: {"narration": "...", "has_errors": false|true}
+  |
+  v
+FastAPI parses JSON:
+  • has_errors=true → save screenshot to datasets/errors/, log failure
+  • Either way → call MeloTTS with narration text → WAV bytes
   |
   v
 Browser plays audio
 ```
 
-See [`docs/adr/009-agent-tool-calling-architecture.md`](docs/adr/009-agent-tool-calling-architecture.md) for the full design.
+See [`docs/adr/009-agent-tool-calling-architecture.md`](docs/adr/009-agent-tool-calling-architecture.md) and [`docs/adr/011-agent-loop-refinements.md`](docs/adr/011-agent-loop-refinements.md) for the full design.
 
 ## Dataset
 
@@ -124,6 +131,10 @@ Full rationale in [`docs/adr/`](docs/adr/).
 - **PaddlePaddle version**: Must use `paddlepaddle==3.2.0`. Version 3.3.0 has an OneDNN PIR bug that breaks CPU inference.
 - **FP16 only**: No BF16, INT4, or INT8 on this hardware.
 - `datasets/` and `models/` are host volumes — not in git.
+
+## TODOs
+
+- **Async OCR error logging**: When OCR fails or produces gibberish, Qwen should fire-and-forget to a separate async service that logs the raw OCR debug output along with the screen capture. This must not delay the audio response to the user.
 
 ---
 

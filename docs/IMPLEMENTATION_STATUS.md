@@ -128,17 +128,21 @@ tests/test_tools.py::test_known_fixture_values PASSED                    [100%]
    - Add `debug=True` mode that returns raw OCR boxes as structured JSON (not stdout)
    - Needed for Qwen to reason about raw OCR when failures occur
 
-8. **TTS Tool**
+8. **TTS Service (FastAPI-called, not a Qwen tool)**
    - File: `src/stardew_vision/tts/synthesize.py`
    - Library: MeloTTS-English
-   - Interface: `text_to_speech(text: str) -> bytes` (WAV bytes)
+   - Interface: `synthesize(text: str) -> bytes` (WAV bytes)
+   - Called directly by FastAPI after parsing Qwen's final JSON — not dispatched as a tool call
+   - See ADR-011
 
 9. **Agent Loop (FastAPI as runtime)**
    - File: `src/stardew_vision/serving/inference.py`
    - Raw OpenAI client multi-turn loop (no agent framework)
-   - Manages: tool dispatch, image injection, has_errors logging, error image save
-   - Error images saved to `datasets/errors/<timestamp>_<uuid>.png`
-   - Tool definitions in OpenAI function-calling format
+   - Turn 1: Qwen classifies screen → calls OCR tool (if recognized) or returns JSON immediately
+   - Turn 2: Qwen validates/corrects OCR result → returns `{"narration": "...", "has_errors": bool}`
+   - FastAPI parses JSON, saves error screenshot if needed, calls MeloTTS directly
+   - `text_to_speech` is NOT in the tool definitions
+   - See ADR-011
 
 10. **Zero-shot Baseline**
     - Test if Qwen2.5-VL-7B runs the full loop correctly without fine-tuning
@@ -215,13 +219,16 @@ pytest = ">=9.0.0"
 - This lets Qwen reason about raw OCR boxes when it detects failures
 
 **Step 2**: Write `src/stardew_vision/tts/synthesize.py`
-- MeloTTS wrapper: `text_to_speech(text: str) -> bytes`
-- Returns WAV bytes; FastAPI streams to browser
+- MeloTTS wrapper: `synthesize(text: str) -> bytes`
+- Returns WAV bytes; called directly by FastAPI (not a Qwen tool call)
 
-**Step 3**: Write `src/stardew_vision/serving/inference.py`
-- Multi-turn agent loop using raw OpenAI client
-- Tool dispatch: inject base64 image, call extraction function, return result to Qwen
-- Error handling: on `has_errors=True` from Qwen, save image to `datasets/errors/`, write structured log
+**Step 3**: Rewrite `src/stardew_vision/serving/inference.py` per ADR-011
+- System prompt generalized — any Stardew Valley screen, not Pierre's-shop-specific
+- Remove `text_to_speech` from tool definitions and TOOL_REGISTRY
+- Remove forced `crop_pierres_detail_panel` on turn 0 — let Qwen decide freely
+- Remove `debug=True` retry step
+- Parse Qwen's final JSON `{"narration", "has_errors"}` and call MeloTTS directly
+- On `has_errors=True`: save image to `datasets/errors/`, write structured log
 
 **Step 4**: Test zero-shot loop
 - Does Qwen2.5-VL-7B correctly run all turns without fine-tuning?

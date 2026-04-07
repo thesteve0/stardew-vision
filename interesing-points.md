@@ -1,0 +1,5 @@
+1. It's not always about the latest and greatest GPU - for some use cases, specifically with smaller models, CPU is actually faster. 
+2. 
+3. In an agentic workflow something outside the model is coordinating the tool calls. The model itself does not call a tool, it tells the coordinating "application or agent" which tool to call and then the information from the tool should come back to the model. On my dekstop, Claude Code is that application or agent. 
+   4. There is something tickling my brain about when you actuallly need to have an agentic/LLM underneath - it has to be something about "a conversation" AND "non-deterministic output". Typically an Agent is some normal code application that uses an LLM underneath. If it doesn't use any LLMs underneath than it is just a tool and not an agent? 
+4. 

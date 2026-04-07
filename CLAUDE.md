@@ -105,6 +105,12 @@ See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 
 ## Important Patterns
 
+**Package Management (CRITICAL — enforced project rule):**
+- **ALWAYS use `uv add <package>`** to add a new dependency
+- **ALWAYS use `uv sync`** to install from the lockfile
+- **NEVER use `pip install`** — it silently overwrites ROCm-provided packages (torch, numpy, scipy, etc.) and breaks GPU access permanently for the session
+- Exception: `pip install uv` is acceptable only as a Dockerfile bootstrap step before the project venv exists
+
 **ROCm constraints** (enforced throughout — see `template_docs/notesOnRocm72.md`):
 - `dtype=torch.float16` everywhere — no BF16, no INT4, no INT8
 - `ROCBLAS_USE_HIPBLASLT=1` (already in devcontainer env)
@@ -181,12 +187,16 @@ docker run --rm \
   vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --dtype float16 \
   --port 8000 \
+  --max-model-len 4096 \
+  --limit-mm-per-prompt '{"image": 1}' \
   --enable-auto-tool-choice \
   --tool-call-parser hermes \
   --chat-template /chat_template.jinja
 ```
 
 **Startup time:** ~5-8 minutes (model loading + encoder cache profiling)
+
+**vLLM Configuration Reference:** https://raw.githubusercontent.com/vllm-project/vllm/refs/heads/main/vllm/engine/arg_utils.py (for `--limit-mm-per-prompt` and other engine args)
 
 **Test from host:**
 ```bash

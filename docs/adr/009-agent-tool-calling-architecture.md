@@ -1,9 +1,11 @@
 # ADR-009: Agent/Tool-Calling Pipeline Architecture
 
 **Date**: 2026-03-17
-**Status**: Accepted
+**Status**: Partially superseded by ADR-011 (2026-04-05)
 **Supersedes**: ADR-002
 **Deciders**: Project team
+
+> **ADR-011 amends this ADR on three points**: (1) TTS is no longer a Qwen tool call — FastAPI calls MeloTTS directly after Qwen returns its final response. (2) Qwen always returns structured JSON `{"narration": "...", "has_errors": bool}` rather than signaling completion via a tool call — JSON output is enforced by fine-tuning. (3) The `debug=True` retry step is removed from the loop — see ADR-011 for rationale and the async logging TODO. The core architecture (FastAPI as runtime, Qwen as reasoner, OpenCV+PaddleOCR extraction tools, raw OpenAI client) is unchanged.
 
 ## Context
 
@@ -81,10 +83,8 @@ Browser <audio> element plays
 - Output (normal): `{ "name": str, "description": str, "price_per_unit": int, "quantity_selected": int, "total_cost": int, "energy": str, "health": str }`
 - Output (debug=True): same fields + `"ocr_raw": [{"text": str, "score": float, "rel_y": float}, ...]`
 
-**`text_to_speech`**
-- Input: `text: str` (narration string assembled by Qwen)
-- Action: MeloTTS synthesis (CPU)
-- Output: WAV bytes returned to FastAPI; FastAPI streams to browser
+**`text_to_speech`** *(removed as a tool — see ADR-011)*
+- FastAPI now calls MeloTTS directly after Qwen returns its final JSON. TTS is no longer dispatched via tool call.
 
 **`crop_tv_dialog`** (Phase 2)
 - Input: `image_b64`
@@ -221,7 +221,7 @@ Do not attempt to read text from the image yourself. Use the extraction tools.
 - Qwen2.5-VL-7B as the orchestrator (agentic reasoner + tool dispatcher)
 - FastAPI as the agent runtime (loop management, tool execution, state, error logging)
 - OpenCV + PaddleOCR (PP-OCRv5) for CPU-side extraction (see ADR-010)
-- MeloTTS as a tool call (not a hardcoded pipeline step)
+- MeloTTS called directly by FastAPI (not a Qwen tool call — see ADR-011)
 - Pierre's shop detail panel as the MVP screen type
 - Raw OpenAI client (no agent framework) for the loop — full control, no abstraction layer
 - OpenAI function-calling format for tool dispatch (compatible with vLLM serving)

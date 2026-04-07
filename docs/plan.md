@@ -9,7 +9,7 @@
 - 🔄 Step 2: Rebuild devcontainer with forwarded ports (8000, 8001)
 - 🔄 Step 3: Start FastAPI webapp in devcontainer
 - 🔄 Step 4: POST `tests/fixtures/pierre_shop_001.png` to `/analyze`
-- 🔄 Step 5: Verify Qwen calls `crop_pierres_detail_panel`, then `text_to_speech`, narration in response
+- 🔄 Step 5: Verify Qwen calls `crop_pierres_detail_panel`, then returns `{"narration": "...", "has_errors": false}`, FastAPI calls MeloTTS
 - Step 6 (after loop verified): Wire real MeloTTS → replace TTS stub in `src/stardew_vision/tts/synthesize.py`
 - Step 7: Switch `/analyze` to return `audio/wav`
 - Step 8: Fine-tuning (urgent) — collect multi-screen-type data, fine-tune Qwen on screen classification + tool dispatch
@@ -34,6 +34,8 @@ docker run --rm \
   vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --dtype float16 \
   --port 8000 \
+  --max-model-len 4096 \
+  --limit-mm-per-prompt '{"image": 1}' \
   --enable-auto-tool-choice \
   --tool-call-parser hermes
 ```
@@ -84,28 +86,32 @@ FastAPI POST /analyze  (port 8000)
   AGENT LOOP  (raw OpenAI client; no agent framework)
 ═══════════════════════════════════════════════════════════════
 
-  Turn 1 — Extraction
+  Turn 1 — Screen recognition + extraction (or immediate fallback)
   FastAPI → Qwen: image + system prompt + tool list
+
+  Path A — Recognized screen:
   Qwen → tool_call: crop_pierres_detail_panel  ─────> OpenCV + PaddleOCR [Phase 1 MVP ✓]
                                                         Returns: {name, description,
                                                                   price_per_unit,
                                                                   quantity_selected,
                                                                   total_cost,
                                                                   energy, health}
-  Turn 2 — Quality check + correction
+  Turn 2 — Quality check + correction (Path A only)
   Qwen reviews OCR result:
     • Silently fixes recoverable typos using language knowledge
-    • If failures: tool_call crop_pierres_detail_panel(debug=True) ─> +ocr_raw
-    • If unresolvable: sets has_errors=True
-  FastAPI on has_errors=True:
-    • Saves screenshot → datasets/errors/<timestamp>_<uuid>.png
-    • Logs image path + error + raw OCR
+    • If unresolvable: sets has_errors=true in final JSON
+  Qwen → FastAPI: {"narration": "...", "has_errors": false|true}
 
-  Turn 3 — Speech synthesis
-  Qwen assembles narration text (with error prefix if has_errors=True)
-  Qwen → tool_call: text_to_speech(text="...") ─────> MeloTTS (CPU, WAV)
+  Path B — Unrecognized screen (no tool call):
+  Qwen → FastAPI: {"narration": "I have not been trained to recognize that screen...",
+                   "has_errors": false}
 
   LOOP ENDS
+  |
+  v
+FastAPI:
+  • has_errors=true → save screenshot → datasets/errors/<timestamp>_<uuid>.png + log
+  • Call MeloTTS directly with narration text ─────> WAV bytes
   |
   v
 FastAPI response  (audio/wav, autoplay)
@@ -118,7 +124,12 @@ Phase 2 and 3 tools slot into the same loop:
 - `crop_tv_dialog(image_b64)` → `{"text": str}` [Phase 2]
 - `crop_inventory_tooltip(image_b64)` → `{"name", "description", "sell_price"}` [Phase 3]
 
-**Key architectural property**: The orchestrator VLM uses GPU for vision reasoning only. Text extraction (OpenCV + PaddleOCR) and TTS (MeloTTS) run on CPU. New screen types are added by writing one extraction function and adding training examples — no loop changes needed.
+**Key architectural properties**:
+- The orchestrator VLM uses GPU for vision reasoning only. Text extraction (OpenCV + PaddleOCR) and TTS (MeloTTS) run on CPU.
+- TTS is called directly by FastAPI — it is not a Qwen tool call. Qwen's only job is to return `{"narration": "...", "has_errors": bool}`.
+- Qwen returns structured JSON enforced by fine-tuning. FastAPI handles `has_errors` logging and MeloTTS dispatch deterministically.
+- New screen types are added by writing one extraction function and adding training examples — no loop changes needed.
+- See [ADR-011](adr/011-agent-loop-refinements.md) for the rationale behind these design choices.
 
 ---
 
@@ -130,7 +141,7 @@ Full rationale in `docs/adr/`. Summary:
 |---|---|---|
 | VLM Orchestrator | `Qwen/Qwen2.5-VL-7B-Instruct` (FP16, LoRA via PEFT) — screen classifier + tool dispatcher | [ADR-001](adr/001-vlm-selection.md), [ADR-009](adr/009-agent-tool-calling-architecture.md) |
 | VLM Comparison | `HuggingFaceTB/SmolVLM2-2.2B-Instruct` — same orchestrator task, smaller model | [ADR-001](adr/001-vlm-selection.md) |
-| Pipeline architecture | Agent/tool-calling: orchestrator VLM + CPU extraction agents | [ADR-009](adr/009-agent-tool-calling-architecture.md) |
+| Pipeline architecture | Agent/tool-calling: orchestrator VLM + CPU extraction agents | [ADR-009](adr/009-agent-tool-calling-architecture.md), [ADR-011](adr/011-agent-loop-refinements.md) |
 | Extraction layer | OpenCV template matching + PaddleOCR PP-OCRv5 (CPU-only) | [ADR-010](adr/010-screen-region-extraction.md), [docs/ocr-choice.md](ocr-choice.md) |
 | TTS | MeloTTS-English (local, CPU/GPU-optional, MIT) | [ADR-003](adr/003-tts-selection.md) |
 | Repo structure | Single monorepo | [ADR-004](adr/004-repo-structure.md) |

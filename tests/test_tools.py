@@ -56,7 +56,7 @@ def test_panel_not_found_raises(tmp_path):
     import base64
 
     import cv2
-    from stardew_vision.tools.crop_pierres_detail_panel import (
+    from stardew_ocr.crop_pierres_detail_panel import (
         PanelNotFoundError,
         crop_pierres_detail_panel,
     )
@@ -76,7 +76,7 @@ def test_panel_not_found_raises(tmp_path):
 
 def test_parse_pierre_fields_structure():
     """parse_pierre_fields always returns the five required keys."""
-    from stardew_vision.tools.crop_pierres_detail_panel import parse_pierre_fields
+    from stardew_ocr.crop_pierres_detail_panel import parse_pierre_fields
 
     result = parse_pierre_fields([])
     assert set(result.keys()) == {"name", "description", "price_per_unit", "quantity_selected", "total_cost", "energy", "health"}
@@ -84,7 +84,7 @@ def test_parse_pierre_fields_structure():
 
 def test_parse_pierre_fields_types():
     """Returned field types are correct even on empty input."""
-    from stardew_vision.tools.crop_pierres_detail_panel import parse_pierre_fields
+    from stardew_ocr.crop_pierres_detail_panel import parse_pierre_fields
 
     result = parse_pierre_fields([])
     assert isinstance(result["name"], str)
@@ -96,7 +96,7 @@ def test_parse_pierre_fields_types():
 
 def test_parse_pierre_fields_price_parsing():
     """Numeric price extraction handles 'x60: 1200' format."""
-    from stardew_vision.tools.crop_pierres_detail_panel import parse_pierre_fields
+    from stardew_ocr.crop_pierres_detail_panel import parse_pierre_fields
 
     ocr = [
         {"text": "Parsnip Seeds", "score": 0.99, "rel_y": 0.03},
@@ -122,7 +122,7 @@ def test_parse_pierre_fields_price_parsing():
 def test_locate_panel_finds_match():
     """Template match confidence must be >= 0.85 on the fixture screenshot."""
     import cv2
-    from stardew_vision.tools.crop_pierres_detail_panel import locate_panel
+    from stardew_ocr.crop_pierres_detail_panel import locate_panel
 
     img = cv2.imread(str(FIXTURE_SCREENSHOT))
     template = cv2.imread(str(TEMPLATE_FILE))
@@ -136,7 +136,7 @@ def test_locate_panel_finds_match():
 @_fixture_skip()
 def test_extract_returns_required_keys():
     """Full extraction returns all required keys (no ocr_raw in normal mode)."""
-    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
+    from stardew_ocr.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
     result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT)
     assert set(result.keys()) == {"name", "description", "price_per_unit", "quantity_selected", "total_cost", "energy", "health"}
@@ -145,7 +145,7 @@ def test_extract_returns_required_keys():
 @_fixture_skip()
 def test_field_types():
     """Extracted name/description are str; price fields are int."""
-    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
+    from stardew_ocr.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
     result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT)
     assert isinstance(result["name"], str)
@@ -158,7 +158,7 @@ def test_field_types():
 @_fixture_skip()
 def test_debug_mode_includes_ocr_raw():
     """debug=True adds ocr_raw list to the returned dict; normal keys still present."""
-    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
+    from stardew_ocr.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
     result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT, debug=True)
     assert "ocr_raw" in result
@@ -179,7 +179,7 @@ def test_debug_mode_includes_ocr_raw():
 def test_known_fixture_values():
     """Extracted values match ground truth for the fixture screenshot."""
     from rapidfuzz import fuzz
-    from stardew_vision.tools.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
+    from stardew_ocr.crop_pierres_detail_panel import crop_pierres_detail_panel_from_path
 
     result = crop_pierres_detail_panel_from_path(FIXTURE_SCREENSHOT)
 

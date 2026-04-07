@@ -11,12 +11,12 @@ from fastapi.staticfiles import StaticFiles
 # stardew_vision.* output always reaches the terminal.
 _handler = logging.StreamHandler(sys.stdout)
 _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s — %(message)s"))
-_sv_logger = logging.getLogger("stardew_vision")
+_sv_logger = logging.getLogger("stardew_coordinator")
 _sv_logger.addHandler(_handler)
 _sv_logger.setLevel(logging.DEBUG)
 _sv_logger.propagate = False
 
-from stardew_vision.webapp import routes
+from stardew_coordinator import routes
 
 _STATIC_DIR = Path(__file__).parent / "static"
 

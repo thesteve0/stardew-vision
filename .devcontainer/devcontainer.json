@@ -12,7 +12,6 @@
       "gid": "2112",
       "upgradePackages": false
     },
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
   },
 
   "runArgs": [
@@ -48,7 +47,7 @@
     "HIP_VISIBLE_DEVICES": "0",
     "ROCM_HOME": "/opt/rocm",
     "ROCBLAS_USE_HIPBLASLT": "1",
-    "PYTHONPATH": "/workspaces/stardew-vision/src",
+    "PYTHONPATH": "/workspaces/stardew-vision/services/coordinator:/workspaces/stardew-vision/services/ocr-tool:/workspaces/stardew-vision/services/tts-tool",
     "HF_HOME": "/workspaces/stardew-vision/.cache/huggingface",
     "TORCH_HOME": "/workspaces/stardew-vision/.cache/torch",
     "TRANSFORMERS_CACHE": "/workspaces/stardew-vision/.cache/huggingface/transformers",
@@ -65,6 +64,10 @@
 
   "workspaceFolder": "/workspaces/stardew-vision",
   "remoteUser": "stpousty-devcontainer",
+
+  "remoteEnv": {
+    "PATH": "/home/stpousty-devcontainer/.local/bin:${containerEnv:PATH}"
+  },
 
   "customizations": {
     "vscode": {
@@ -110,7 +113,7 @@
     }
   },
 
-  "forwardPorts": [6006, 8888, 8000, 8001],
+  "forwardPorts": [6006, 8888, 8000],
 
   "postCreateCommand": ".devcontainer/setup-environment.sh",
 

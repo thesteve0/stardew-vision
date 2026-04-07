@@ -1,0 +1,11 @@
+[project]
+name = "stardew-tts-tool"
+version = "0.1.0"
+description = "TTS microservice for Stardew Vision using Kokoro"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "kokoro>=0.9.2",
+    "soundfile>=0.12.0",
+]

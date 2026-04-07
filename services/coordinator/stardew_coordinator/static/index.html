@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stardew Vision - Accessibility Tool for Stardew Valley Players</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; background: #fafafa; }
+    h1 { color: #2e7d32; margin-bottom: 0.25rem; font-size: 2rem; }
+    p.subtitle { color: #555; margin-top: 0; font-size: 1.1rem; }
+    form { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem; }
+
+    /* File input - 3x larger with 3D raised effect */
+    input[type=file] {
+      font-size: 3rem;
+      padding: 1rem;
+      cursor: pointer;
+    }
+    input[type=file]::file-selector-button {
+      font-size: 3rem;
+      padding: 1.2rem 2.8rem;
+      font-weight: bold;
+      background: linear-gradient(to bottom, #4caf50 0%, #2e7d32 100%);
+      color: white;
+      border: 3px solid #1b5e20;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow:
+        0 6px 0 #1b5e20,
+        0 8px 12px rgba(0,0,0,0.3);
+      transition: all 0.1s ease;
+    }
+    input[type=file]::file-selector-button:hover {
+      background: linear-gradient(to bottom, #66bb6a 0%, #4caf50 100%);
+      box-shadow:
+        0 6px 0 #1b5e20,
+        0 10px 15px rgba(0,0,0,0.4);
+    }
+    input[type=file]::file-selector-button:active {
+      box-shadow:
+        0 2px 0 #1b5e20,
+        0 3px 5px rgba(0,0,0,0.3);
+      transform: translateY(4px);
+    }
+    input[type=file]::file-selector-button:focus {
+      outline: 3px solid #ffeb3b;
+      outline-offset: 3px;
+    }
+
+    /* Submit button with raised 3D effect */
+    button {
+      align-self: flex-start;
+      padding: 1.2rem 2.8rem;
+      font-size: 1.5rem;
+      font-weight: bold;
+      background: linear-gradient(to bottom, #4caf50 0%, #2e7d32 100%);
+      color: white;
+      border: 3px solid #1b5e20;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow:
+        0 6px 0 #1b5e20,
+        0 8px 12px rgba(0,0,0,0.3);
+      transition: all 0.1s ease;
+    }
+    button:hover {
+      background: linear-gradient(to bottom, #66bb6a 0%, #4caf50 100%);
+      box-shadow:
+        0 6px 0 #1b5e20,
+        0 10px 15px rgba(0,0,0,0.4);
+    }
+    button:active {
+      box-shadow:
+        0 2px 0 #1b5e20,
+        0 3px 5px rgba(0,0,0,0.3);
+      transform: translateY(4px);
+    }
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+      box-shadow:
+        0 4px 0 #888,
+        0 5px 8px rgba(0,0,0,0.2);
+      border-color: #888;
+    }
+    button:focus {
+      outline: 3px solid #ffeb3b;
+      outline-offset: 3px;
+    }
+
+    #status {
+      margin-top: 1rem;
+      font-style: italic;
+      color: #555;
+      font-size: 1.2rem;
+    }
+    #result { margin-top: 1.5rem; display: none; }
+    #error-banner {
+      background: #ffebee; color: #c62828; padding: 1rem 1.5rem;
+      border-radius: 4px; margin-bottom: 1rem; display: none;
+      font-size: 1.1rem; font-weight: bold;
+      border: 2px solid #c62828;
+    }
+    h2 {
+      font-size: 1.3rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #2e7d32;
+      margin-bottom: 0.5rem;
+      font-weight: bold;
+    }
+    #audio-block { margin-top: 1rem; }
+    #audio-player {
+      width: 100%;
+      margin-top: 0.5rem;
+      height: 60px;
+    }
+
+    /* Skip to main content link for screen readers */
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 0;
+      background: #2e7d32;
+      color: white;
+      padding: 8px;
+      text-decoration: none;
+      z-index: 100;
+    }
+    .skip-link:focus {
+      top: 0;
+    }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <main id="main-content" role="main">
+    <h1>Stardew Vision</h1>
+    <p class="subtitle">Upload a Stardew Valley screenshot to hear the UI panel narrated.</p>
+
+    <form id="upload-form" aria-labelledby="form-instructions">
+      <p id="form-instructions" class="visually-hidden">
+        Select a screenshot image file, then activate the Analyze Screenshot button to hear the narration.
+      </p>
+      <label for="file-input" style="font-size: 1.2rem; font-weight: bold; color: #2e7d32;">
+        Choose Screenshot:
+      </label>
+      <input
+        id="file-input"
+        type="file"
+        accept="image/*"
+        required
+        aria-required="true"
+        aria-describedby="file-help">
+      <span id="file-help" style="font-size: 0.9rem; color: #666;">
+        Supported formats: PNG, JPEG, or any image file
+      </span>
+      <button
+        id="submit-btn"
+        type="submit"
+        aria-label="Analyze screenshot and generate audio narration">
+        Analyze Screenshot
+      </button>
+    </form>
+
+    <div
+      id="status"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true">
+    </div>
+
+    <div id="result" aria-live="polite" aria-atomic="false">
+      <div
+        id="error-banner"
+        role="alert"
+        aria-live="assertive">
+      </div>
+      <div id="audio-block" style="display:none">
+        <h2>Audio Narration</h2>
+        <audio
+          id="audio-player"
+          controls
+          autoplay
+          aria-label="Narration audio player">
+        </audio>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const form = document.getElementById('upload-form');
+    const statusEl = document.getElementById('status');
+    const resultEl = document.getElementById('result');
+    const errorBanner = document.getElementById('error-banner');
+    const submitBtn = document.getElementById('submit-btn');
+    const audioBlock = document.getElementById('audio-block');
+    const audioPlayer = document.getElementById('audio-player');
+
+    // Revoke previous object URL to avoid memory leaks
+    let _prevAudioUrl = null;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = document.getElementById('file-input').files[0];
+      if (!file) return;
+
+      submitBtn.disabled = true;
+      submitBtn.setAttribute('aria-busy', 'true');
+      statusEl.textContent = 'Analyzing screenshot… This may take up to 30 seconds.';
+      resultEl.style.display = 'none';
+      errorBanner.style.display = 'none';
+      audioBlock.style.display = 'none';
+      if (_prevAudioUrl) { URL.revokeObjectURL(_prevAudioUrl); _prevAudioUrl = null; }
+
+      const fd = new FormData();
+      fd.append('file', file);
+
+      try {
+        const resp = await fetch('/analyze', { method: 'POST', body: fd });
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`Server error ${resp.status}: ${txt}`);
+        }
+
+        const contentType = resp.headers.get('content-type') || '';
+
+        if (contentType.includes('audio/wav') || contentType.includes('audio/')) {
+          // TTS path — play audio
+          const blob = await resp.blob();
+          _prevAudioUrl = URL.createObjectURL(blob);
+          audioPlayer.src = _prevAudioUrl;
+          audioBlock.style.display = 'block';
+          statusEl.textContent = 'Analysis complete. Audio is ready to play.';
+          // Set focus to audio player for screen reader users
+          audioPlayer.focus();
+        } else {
+          // JSON fallback — TTS was not called or unavailable
+          const data = await resp.json();
+
+          if (data.has_errors) {
+            errorBanner.textContent = 'There was an error understanding part of this image. The screenshot has been saved for review.';
+            errorBanner.style.display = 'block';
+          }
+
+          statusEl.textContent = 'Analysis complete, but audio generation failed. Please try again.';
+        }
+
+        resultEl.style.display = 'block';
+      } catch (err) {
+        statusEl.textContent = 'Error: ' + err.message;
+        errorBanner.textContent = 'Failed to analyze screenshot. Please check your connection and try again.';
+        errorBanner.style.display = 'block';
+        resultEl.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.removeAttribute('aria-busy');
+      }
+    });
+  </script>
+</body>
+</html>

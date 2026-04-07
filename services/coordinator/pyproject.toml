@@ -1,0 +1,12 @@
+[project]
+name = "stardew-coordinator"
+version = "0.1.0"
+description = "Coordinator service for Stardew Vision — FastAPI + Qwen agent loop"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "openai>=1.50.0",
+    "httpx>=0.28.1",
+    "python-multipart>=0.0.12",
+]

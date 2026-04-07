@@ -50,6 +50,8 @@ docker run --rm \
   vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --dtype float16 \
   --port 8000 \
+  --max-model-len 4096 \
+  --limit-mm-per-prompt '{"image": 1}' \
   --enable-auto-tool-choice \
   --tool-call-parser hermes \
   --chat-template /chat_template.jinja \

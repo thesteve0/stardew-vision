@@ -162,6 +162,16 @@ PYEOF
     echo "✓ uv project initialized with ROCm protection"
 fi
 
+# Install Claude CLI to user directory
+if ! command -v claude &> /dev/null; then
+    echo "Installing Claude CLI..."
+    curl -fsSL https://claude.ai/install.sh | bash
+    echo "✓ Claude CLI installed to ~/.local/bin/claude"
+else
+    CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
+    echo "✓ Claude CLI already installed: $CLAUDE_VERSION"
+fi
+
 # Configure git identity
 echo "Configuring git identity..."
 git config --global user.name "Steven Pousty"
