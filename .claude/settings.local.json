@@ -120,7 +120,8 @@
       "Bash(git mv:*)",
       "WebFetch(domain:pypi.org)",
       "WebFetch(domain:medium.com)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(du:*)"
     ]
   }
 }

@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocr-tool
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: ocr-tool
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      component: ocr-tool
+  template:
+    metadata:
+      labels:
+        app: stardew-vision
+        component: ocr-tool
+    spec:
+      containers:
+        - name: ocr
+          image: ghcr.io/thesteve0/stardew-ocr-tool:v0.1.0
+          ports:
+            - containerPort: 8002
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: templates
+              mountPath: /app/datasets/assets/templates
+              readOnly: true
+      volumes:
+        - name: templates
+          configMap:
+            name: ocr-templates
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ocr-tool
+  namespace: stardew-vision
+spec:
+  selector:
+    component: ocr-tool
+  ports:
+    - port: 8002
+      targetPort: 8002
+      protocol: TCP

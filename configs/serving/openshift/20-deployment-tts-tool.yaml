@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tts-tool
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: tts-tool
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      component: tts-tool
+  template:
+    metadata:
+      labels:
+        app: stardew-vision
+        component: tts-tool
+    spec:
+      initContainers:
+        - name: download-kokoro
+          image: ghcr.io/thesteve0/stardew-tts-tool:v0.1.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              python -c "from kokoro import generate; generate('test', voice='af_bella', speed=1.0)" || true
+          env:
+            - name: HF_HOME
+              value: /cache
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /cache
+      containers:
+        - name: tts
+          image: ghcr.io/thesteve0/stardew-tts-tool:v0.1.0
+          ports:
+            - containerPort: 8003
+              protocol: TCP
+          env:
+            - name: HF_HOME
+              value: /root/.cache/huggingface
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: hf-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tts-tool
+  namespace: stardew-vision
+spec:
+  selector:
+    component: tts-tool
+  ports:
+    - port: 8003
+      targetPort: 8003
+      protocol: TCP

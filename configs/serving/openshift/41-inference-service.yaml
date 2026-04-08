@@ -1,0 +1,38 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: vllm-qwen
+  namespace: stardew-vision
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 2
+    scaleMetric: concurrency
+    scaleTarget: 1
+    model:
+      modelFormat:
+        name: pytorch
+      runtime: vllm-runtime
+      storageUri: s3://${BUCKET_NAME}/models/qwen2.5-vl-7b/
+      env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: stardew-model-storage
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: stardew-model-storage
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_S3_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: stardew-model-storage
+              key: BUCKET_HOST
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        - name: S3_USE_HTTPS
+          value: "1"
+        - name: S3_VERIFY_SSL
+          value: "0"

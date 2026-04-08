@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coordinator
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: coordinator
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      component: coordinator
+  template:
+    metadata:
+      labels:
+        app: stardew-vision
+        component: coordinator
+    spec:
+      containers:
+        - name: coordinator
+          image: ghcr.io/thesteve0/stardew-coordinator:v0.1.0
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          env:
+            - name: OCR_TOOL_URL
+              value: http://ocr-tool:8002
+            - name: TTS_TOOL_URL
+              value: http://tts-tool:8003
+            - name: VLLM_BASE_URL
+              value: http://vllm-qwen-predictor-default.stardew-vision.svc.cluster.local/v1
+            - name: VLLM_MODEL
+              value: Qwen/Qwen2.5-VL-7B-Instruct
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: errors
+              mountPath: /app/datasets/errors
+      volumes:
+        - name: errors
+          persistentVolumeClaim:
+            claimName: error-screenshots
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator
+  namespace: stardew-vision
+spec:
+  selector:
+    component: coordinator
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: stardew-vision
+  namespace: stardew-vision
+spec:
+  to:
+    kind: Service
+    name: coordinator
+  port:
+    targetPort: 8000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

@@ -1,0 +1,8 @@
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: stardew-model-storage
+  namespace: stardew-vision
+spec:
+  generateBucketName: stardew-models
+  storageClassName: openshift-storage.noobaa.io
