@@ -121,7 +121,15 @@
       "WebFetch(domain:pypi.org)",
       "WebFetch(domain:medium.com)",
       "Read(//tmp/**)",
-      "Bash(du:*)"
+      "Bash(du:*)",
+      "Bash(oc whoami:*)",
+      "Bash(oc project:*)",
+      "Bash(oc get:*)",
+      "Bash(oc describe:*)",
+      "WebFetch(domain:docs.redhat.com)",
+      "WebFetch(domain:ai-on-openshift.io)",
+      "WebFetch(domain:developers.redhat.com)",
+      "Bash(oc api-resources:*)"
     ]
   }
 }
