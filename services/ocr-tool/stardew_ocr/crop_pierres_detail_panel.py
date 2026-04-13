@@ -10,6 +10,14 @@ so the extractor works at any resolution (1080p, 1440p, 4K).
 
 from __future__ import annotations
 
+# CRITICAL: Set PaddleX/PaddleOCR environment variables BEFORE any imports
+# that could trigger PaddleX initialization (which happens on paddleocr import)
+import os
+os.environ.setdefault('PADDLEX_HOME', '/tmp/.paddlex')
+os.environ.setdefault('PADDLEX_CACHE_DIR', '/tmp/.paddlex/cache')
+os.environ.setdefault('PADDLE_HUB_HOME', '/tmp/.paddlex/hub')
+os.environ.setdefault('PADDLE_OCR_BASE_DIR', '/tmp/.paddleocr')
+
 import base64
 import json
 import re
@@ -23,7 +31,10 @@ import numpy as np
 # Paths
 # ---------------------------------------------------------------------------
 
-_TEMPLATES_DIR = Path(__file__).parents[3] / "datasets" / "assets" / "templates"
+# Templates are baked into container image at /app/datasets/assets/templates
+# For local development, they're at repo_root/datasets/assets/templates
+import os
+_TEMPLATES_DIR = Path(os.getenv("TEMPLATES_DIR", "/app/datasets/assets/templates"))
 _LAYOUT_FILE = _TEMPLATES_DIR / "pierre_panel_layout.json"
 _TEMPLATE_FILE = _TEMPLATES_DIR / "pierres_detail_panel_corner.png"
 
@@ -47,17 +58,27 @@ class PanelNotFoundError(Exception):
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+# Cache the OCR instance to avoid reloading models from disk on every request
+# Models take ~30s to load into memory, so we keep the instance alive
+_OCR_INSTANCE = None
+
 
 def _load_ocr():
-    """Lazy-load PaddleOCR to avoid import-time GPU initialisation."""
-    from paddleocr import PaddleOCR
+    """Lazy-load PaddleOCR to avoid import-time GPU initialisation.
 
-    return PaddleOCR(
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
-        use_textline_orientation=False,
-        lang="en",
-    )
+    The OCR instance is cached in a module-level variable so models are loaded
+    into memory once and reused across requests.
+    """
+    global _OCR_INSTANCE
+    if _OCR_INSTANCE is None:
+        from paddleocr import PaddleOCR
+        _OCR_INSTANCE = PaddleOCR(
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            lang="en",
+        )
+    return _OCR_INSTANCE
 
 
 def locate_panel(

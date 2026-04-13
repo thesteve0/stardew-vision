@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: huggingface-qwen
+  namespace: stardew-vision
+  labels:
+    opendatahub.io/dashboard: "true"
+    opendatahub.io/managed: "true"
+  annotations:
+    opendatahub.io/connection-type: uri
+    openshift.io/display-name: huggingface-qwen
+stringData:
+  URI: hf://Qwen/Qwen2.5-VL-7B-Instruct
+type: Opaque

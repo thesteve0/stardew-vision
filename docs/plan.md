@@ -1,18 +1,24 @@
 # Stardew Vision: Project Plan
 
-**Last updated**: 2026-04-03
+**Last updated**: 2026-04-13
 **Talk deadline**: ~1 month
-**Status**: Phase 1 extraction tool complete (93% field accuracy, 9/9 tests passing). Agentic loop fully wired (FastAPI + Qwen via vLLM). vLLM server running on host machine. **CURRENT**: Testing agent loop end-to-end.
+**Status**: ✅ **Phase 1 MVP DEPLOYED TO PRODUCTION** — Full agent loop operational on OpenShift AI. Pierre's shop OCR working end-to-end with audio output. Performance: ~5-7s per request (models cached in memory). **NEXT**: Phase 2 fine-tuning — train Qwen on multi-screen recognition and improved narration quality.
 
-**CURRENT SESSION**: Live test the agent loop
-- ✅ Step 1: Start vLLM on host (running in Docker container)
-- 🔄 Step 2: Rebuild devcontainer with forwarded ports (8000, 8001)
-- 🔄 Step 3: Start FastAPI webapp in devcontainer
-- 🔄 Step 4: POST `tests/fixtures/pierre_shop_001.png` to `/analyze`
-- 🔄 Step 5: Verify Qwen calls `crop_pierres_detail_panel`, then returns `{"narration": "...", "has_errors": false}`, FastAPI calls MeloTTS
-- Step 6 (after loop verified): Wire real MeloTTS → replace TTS stub in `src/stardew_vision/tts/synthesize.py`
-- Step 7: Switch `/analyze` to return `audio/wav`
-- Step 8: Fine-tuning (urgent) — collect multi-screen-type data, fine-tune Qwen on screen classification + tool dispatch
+**Phase 1 Completion Summary**:
+- ✅ Extraction tool: PaddleOCR + OpenCV template matching (93% field accuracy, 9/9 tests passing)
+- ✅ Agentic loop: FastAPI runtime + Qwen reasoner via vLLM (ADR-009, ADR-011)
+- ✅ TTS integration: Kokoro TTS with natural-sounding voice
+- ✅ OpenShift deployment: Microservices architecture on OpenShift AI (ADR-012)
+- ✅ Model caching: PaddleOCR instance cached in memory (~2s per request after warmup)
+- ✅ Error handling: Screenshots saved to PVC, comprehensive timing logs
+- ✅ Tool calling: Custom chat template for Qwen via KServe ConfigMap
+
+**CURRENT FOCUS**: Phase 2 Fine-Tuning
+- Collect multi-screen-type training data (Pierre's shop, TV dialog, inventory tooltip)
+- Annotate screenshots with expected tool calls and narrations
+- Fine-tune Qwen2.5-VL-7B on screen classification + tool dispatch
+- Evaluate fine-tuned model vs. zero-shot baseline
+- Deploy fine-tuned model to OpenShift AI (replace base model)
 
 ## vLLM Start Command (Run on Host Machine)
 

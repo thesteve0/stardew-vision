@@ -7,7 +7,7 @@ metadata:
     app: stardew-vision
     component: tts-tool
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       component: tts-tool
@@ -19,7 +19,7 @@ spec:
     spec:
       initContainers:
         - name: download-kokoro
-          image: ghcr.io/thesteve0/stardew-tts-tool:v0.1.0
+          image: ghcr.io/thesteve0/stardew-tts-tool:v0.4.0
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -32,13 +32,13 @@ spec:
               mountPath: /cache
       containers:
         - name: tts
-          image: ghcr.io/thesteve0/stardew-tts-tool:v0.1.0
+          image: ghcr.io/thesteve0/stardew-tts-tool:v0.4.0
           ports:
             - containerPort: 8003
               protocol: TCP
           env:
             - name: HF_HOME
-              value: /root/.cache/huggingface
+              value: /cache
           resources:
             requests:
               cpu: 1000m
@@ -60,7 +60,7 @@ spec:
             periodSeconds: 10
           volumeMounts:
             - name: hf-cache
-              mountPath: /root/.cache/huggingface
+              mountPath: /cache
       volumes:
         - name: hf-cache
           persistentVolumeClaim:

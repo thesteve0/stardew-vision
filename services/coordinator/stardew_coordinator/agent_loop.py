@@ -21,6 +21,7 @@ import base64
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -36,7 +37,8 @@ MODEL_NAME = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8001/v1")
 OCR_TOOL_URL = os.getenv("OCR_TOOL_URL", "http://localhost:8002")
 TTS_TOOL_URL = os.getenv("TTS_TOOL_URL", "http://localhost:8003")
-ERRORS_DIR = Path(__file__).parents[3] / "datasets" / "errors"
+# Error screenshots directory (mounted PVC in container, local path in dev)
+ERRORS_DIR = Path(os.getenv("ERRORS_DIR", "/app/datasets/errors"))
 MAX_TURNS = 6
 
 # ---------------------------------------------------------------------------
@@ -49,21 +51,27 @@ You are an accessibility assistant for Stardew Valley players with vision impair
 You will be shown a screenshot from Stardew Valley. Your job is to help the player \
 understand what is on the screen by extracting and narrating the relevant information.
 
-**If you recognize the screen and have a tool for it:**
-1. Call the appropriate extraction tool (e.g., crop_pierres_detail_panel for Pierre's shop).
-   IMPORTANT: Do NOT include an image_b64 argument — the image is already available.
-2. Review the extracted fields. Silently correct obvious OCR errors using your language \
-knowledge (e.g., "Storter" → "Starter", "Pars nip" → "Parsnip").
-3. Return a JSON response with your narration:
-   {"narration": "The item is Parsnip Seeds...", "has_errors": false}
+**CRITICAL: You MUST use the extraction tools when available. Do NOT just describe what you see visually.**
 
-**If the screen is unrecognized or you cannot extract the information:**
+**If you see Pierre's General Store detail panel (item name, description, price):**
+1. IMMEDIATELY call the crop_pierres_detail_panel tool with no arguments.
+   - Do NOT pass image_b64 as an argument — the image is already available to the tool.
+   - Do NOT try to read the text yourself — always use the tool for accurate OCR.
+2. After receiving the OCR result, review the extracted fields. Silently correct obvious \
+OCR errors using your language knowledge (e.g., "Storter" → "Starter", "Pars nip" → "Parsnip").
+3. Then return a JSON response with your narration based on the corrected fields:
+   {"narration": "The item is Parsnip Seeds. Description: Plant in spring, takes 4 days. \
+Price per unit: 20 gold. You have 5 selected for a total of 100 gold.", "has_errors": false}
+
+**If the screen is unrecognized or you have no tool for it:**
 Return immediately:
-{"narration": "I have not been trained to recognize that screen. If it is important to you, please let Steve know.", "has_errors": false}
+{"narration": "I have not been trained to recognize that screen. If it is important to you, \
+please let Steve know.", "has_errors": false}
 
 **On extraction failure:**
 If critical fields are missing or uncorrectable after reviewing the OCR result, return:
-{"narration": "There was an error understanding part of this image. I have logged it. Here is what I was able to get: [partial info]", "has_errors": true}
+{"narration": "There was an error understanding part of this image. I have logged it. \
+Here is what I was able to get: [partial info]", "has_errors": true}
 
 Your final response must ALWAYS be valid JSON with "narration" and "has_errors" keys.\
 """
@@ -121,7 +129,7 @@ async def _dispatch_tool(
         resp = await http.post(
             f"{OCR_TOOL_URL}/extract/pierres-detail-panel",
             json=args,
-            timeout=30.0,
+            timeout=120.0,  # First request loads models into memory, can take 60+ seconds
         )
         resp.raise_for_status()
         return resp.json()
@@ -151,6 +159,10 @@ async def run_agent_loop(image_b64: str) -> dict:
         fields      (dict|None)  — extracted fields from the last successful OCR call
         audio_bytes (bytes|None) — WAV audio from TTS
     """
+    start_time = time.perf_counter()
+    logger.info("⏱️  Starting agent loop: vLLM=%s model=%s", VLLM_BASE_URL, MODEL_NAME)
+    logger.info("Available tools: %s", [t["function"]["name"] for t in TOOL_DEFINITIONS])
+
     client = AsyncOpenAI(base_url=VLLM_BASE_URL, api_key="EMPTY")
     mime = _detect_mime(image_b64)
 
@@ -178,21 +190,39 @@ async def run_agent_loop(image_b64: str) -> dict:
 
     async with httpx.AsyncClient() as http:
         for turn in range(MAX_TURNS):
+            turn_start = time.perf_counter()
             logger.info("=== Agent turn %d/%d ===", turn + 1, MAX_TURNS)
+            logger.debug(
+                "Sending to vLLM: model=%s, tools=%s, tool_choice=auto, messages=%d",
+                MODEL_NAME,
+                [t["function"]["name"] for t in TOOL_DEFINITIONS],
+                len(messages)
+            )
 
+            vlm_start = time.perf_counter()
             response = await client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=messages,
                 tools=TOOL_DEFINITIONS,
                 tool_choice="auto",
             )
+            vlm_elapsed = time.perf_counter() - vlm_start
 
             choice = response.choices[0]
             msg = choice.message
             logger.info(
-                "finish_reason=%s tool_calls=%s content=%r",
-                choice.finish_reason, msg.tool_calls, msg.content,
+                "⏱️  VLM response (%.2fs): finish_reason=%s has_tool_calls=%s num_tool_calls=%d content_preview=%s",
+                vlm_elapsed,
+                choice.finish_reason,
+                bool(msg.tool_calls),
+                len(msg.tool_calls) if msg.tool_calls else 0,
+                (msg.content[:100] + "...") if msg.content and len(msg.content) > 100 else msg.content,
             )
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    logger.info("Tool call detected: name=%s id=%s args=%s",
+                               tc.function.name, tc.id, tc.function.arguments)
+
             messages.append(msg.model_dump(exclude_none=True))
 
             # Check for tool calls (vLLM bug: finish_reason may be "stop" even with tool_calls)
@@ -206,14 +236,18 @@ async def run_agent_loop(image_b64: str) -> dict:
 
                     logger.info("Tool call: %s args=%s", name, args)
 
+                    tool_start = time.perf_counter()
                     try:
                         result = await _dispatch_tool(name, args, image_b64, http)
+                        tool_elapsed = time.perf_counter() - tool_start
+                        logger.info("⏱️  Tool %s completed in %.2fs", name, tool_elapsed)
 
                         if name == "crop_pierres_detail_panel" and isinstance(result, dict):
                             fields = {k: v for k, v in result.items() if k != "ocr_raw"}
 
                     except Exception as exc:
-                        logger.warning("Tool %s raised: %s", name, exc)
+                        tool_elapsed = time.perf_counter() - tool_start
+                        logger.warning("⏱️  Tool %s failed after %.2fs: %s", name, tool_elapsed, exc)
                         result = {"error": str(exc)}
 
                     messages.append({
@@ -233,13 +267,20 @@ async def run_agent_loop(image_b64: str) -> dict:
                         logger.warning("Qwen returned non-JSON content: %r", msg.content)
                         narration = msg.content
                         has_errors = False
+                turn_elapsed = time.perf_counter() - turn_start
+                logger.info("⏱️  Turn %d completed in %.2fs (loop ending, finish_reason=stop)", turn + 1, turn_elapsed)
                 break
 
             else:
+                turn_elapsed = time.perf_counter() - turn_start
                 logger.warning(
-                    "Unexpected finish_reason: %s — stopping loop", choice.finish_reason
+                    "⏱️  Turn %d completed in %.2fs - Unexpected finish_reason: %s — stopping loop",
+                    turn + 1, turn_elapsed, choice.finish_reason
                 )
                 break
+
+            turn_elapsed = time.perf_counter() - turn_start
+            logger.info("⏱️  Turn %d completed in %.2fs (continuing to next turn)", turn + 1, turn_elapsed)
 
     # Save error screenshot if needed
     if has_errors:
@@ -248,6 +289,7 @@ async def run_agent_loop(image_b64: str) -> dict:
     # Call TTS directly (not a tool call)
     if narration:
         try:
+            tts_start = time.perf_counter()
             async with httpx.AsyncClient() as http:
                 resp = await http.post(
                     f"{TTS_TOOL_URL}/synthesize",
@@ -256,10 +298,15 @@ async def run_agent_loop(image_b64: str) -> dict:
                 )
                 resp.raise_for_status()
                 audio_bytes = resp.content
-                logger.info("TTS synthesis succeeded (%d bytes)", len(audio_bytes))
+                tts_elapsed = time.perf_counter() - tts_start
+                logger.info("⏱️  TTS synthesis succeeded in %.2fs (%d bytes)", tts_elapsed, len(audio_bytes))
         except Exception as exc:
-            logger.error("TTS synthesis failed: %s", exc, exc_info=True)
+            tts_elapsed = time.perf_counter() - tts_start
+            logger.error("⏱️  TTS synthesis failed after %.2fs: %s", tts_elapsed, exc, exc_info=True)
             audio_bytes = None
+
+    total_elapsed = time.perf_counter() - start_time
+    logger.info("⏱️  TOTAL agent loop completed in %.2fs", total_elapsed)
 
     return {
         "narration": narration,

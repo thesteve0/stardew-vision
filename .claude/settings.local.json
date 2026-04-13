@@ -129,7 +129,15 @@
       "WebFetch(domain:docs.redhat.com)",
       "WebFetch(domain:ai-on-openshift.io)",
       "WebFetch(domain:developers.redhat.com)",
-      "Bash(oc api-resources:*)"
+      "Bash(oc api-resources:*)",
+      "Bash(oc apply:*)",
+      "Bash(awk '{if \\($5 ~ /M/ || \\($5 ~ /K/ && $5+0 > 100\\)\\) print $0}')",
+      "Bash(grep -n \"configMap\\\\|ConfigMap\\\\|binaryData\" /workspaces/stardew-vision/configs/serving/openshift/*.yaml)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(oc logs:*)",
+      "Bash(kubectl rollout status:*)",
+      "Bash(kubectl get pods:*)",
+      "Bash(kubectl logs:*)"
     ]
   }
 }

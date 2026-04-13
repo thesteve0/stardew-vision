@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-endpoints
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+data:
+  # OCR Tool endpoint
+  OCR_TOOL_URL: "http://ocr-tool:8002"
+
+  # TTS Tool endpoint
+  TTS_TOOL_URL: "http://tts-tool:8003"
+
+  # vLLM endpoint (KServe InferenceService)
+  VLLM_BASE_URL: "http://stardew-vlm-predictor:8080/v1"
+
+  # vLLM model ID (deployment name, not HuggingFace model name)
+  VLLM_MODEL: "stardew-vlm"

@@ -1,7 +1,20 @@
 # Session State - OpenShift AI Model Deployment
 
-**Last Updated**: 2026-04-11  
-**Current Status**: Debugging cluster provisioning for GPU HardwareProfile
+**Last Updated**: 2026-04-12  
+**Current Status**: ✅ vLLM deployed and tested successfully! Ready to deploy microservices.
+
+---
+
+## 🎯 **Quick Resume: What You Need to Know**
+
+If you're picking up from here:
+
+1. **vLLM is running** at `http://stardew-vlm-predictor:8080/v1` (internal only)
+2. **Model ID** for API calls is `stardew-vlm` (NOT the HuggingFace model name)
+3. **Next step**: Deploy microservices (OCR, TTS, coordinator, webapp)
+4. **Key lesson**: vLLM args must use `--flag=value` format with no spaces in JSON
+
+**Ready to deploy?** See [Next Steps](#-next-steps-in-order) below.
 
 ---
 
@@ -39,7 +52,7 @@ If the new machine has Claude Code with memory enabled, these facts should persi
 
 ## 📍 **Current State: Where We Left Off**
 
-### **Completed**
+### **Completed** ✅
 ✅ Researched OpenShift AI deployment documentation  
 ✅ Created comprehensive deployment guides:
    - `docs/DEPLOYING_MODELS_KSERVE.md` (full guide)
@@ -47,31 +60,47 @@ If the new machine has Claude Code with memory enabled, these facts should persi
 ✅ Updated `FIRST_THING.md` with pointers to new guides  
 ✅ Created HuggingFace connection in RHOAI: `huggingface-qwen`  
 ✅ Identified deployment wizard UI flow (4 steps)  
-✅ Attempted first model deployment (failed - see blocker below)  
+✅ Fixed GPU HardwareProfile issue in cluster provisioning  
+✅ Deployed vLLM with Qwen2.5-VL-7B-Instruct successfully  
+✅ Fixed vLLM argument formatting issue  
+✅ Verified internal endpoint connectivity  
+✅ Updated all documentation with corrected formats  
 
-### **Current Blocker** 🚧
+### **Previous Blockers (Resolved)** ✅
+
+#### **Blocker 1: Missing GPU HardwareProfile** (RESOLVED)
 
 **Problem**: GPU `HardwareProfile` missing from OpenShift AI cluster
 
-**Symptom**: Hardware profile dropdown in model deployment wizard only shows `default-profile` (CPU/Memory). No GPU options available.
+**Resolution**: Updated cluster provisioning script to create GPU HardwareProfile in `redhat-ods-applications` namespace.
 
-**Root Cause**: Cluster provisioning script did not create GPU HardwareProfile in `redhat-ods-applications` namespace.
+#### **Blocker 2: vLLM Argument Parsing Error** (RESOLVED)
 
-**Diagnosis**:
-```bash
-# This command shows only default-profile:
-oc get hardwareprofiles -n redhat-ods-applications
-
-# Expected: Should show both default-profile AND nvidia-l40s-gpu (or similar)
+**Problem**: vLLM failed to start with error:
+```
+api_server.py: error: unrecognized arguments: --limit-mm-per-prompt '{"image": 1}'
 ```
 
-**Current Action**: User switched to cluster provisioning project to fix the provisioning script.
+**Root Cause**: Incorrect argument format with quotes and spaces in JSON.
 
-**What Needs to Happen**:
-1. Update cluster provisioning script to create GPU HardwareProfile (see YAML below)
-2. Re-provision cluster OR manually create HardwareProfile
-3. Return to model deployment and verify GPU option appears in dropdown
-4. Complete deployment using new guides
+**Resolution**: Changed argument format:
+- ❌ Wrong: `--limit-mm-per-prompt '{"image": 1}'`
+- ✅ Correct: `--limit-mm-per-prompt={"image":1}`
+
+**Rules learned**:
+1. Use `=` between flag and value: `--flag=value` not `--flag value`
+2. No spaces in JSON: `{"image":1}` not `{"image": 1}`
+3. No quotes around arguments in YAML list
+
+### **Current Status** 🎯
+
+vLLM is **deployed, tested, and working!**
+
+- ✅ Model loaded successfully
+- ✅ GPU detection working
+- ✅ Internal endpoint responding: `http://stardew-vlm-predictor:8080/v1`
+- ✅ Text inference verified
+- ✅ Service DNS resolution confirmed
 
 ---
 
@@ -175,21 +204,33 @@ Chose HuggingFace direct download over ModelCar or S3:
 
 **Alternative**: ModelCar for production (faster startups, no download)
 
-### **3. vLLM Runtime Arguments**
+### **3. vLLM Runtime Arguments** ✅ CORRECTED
+
+**Correct format** (CRITICAL):
+```yaml
+args:
+  - --max-model-len=4096
+  - --limit-mm-per-prompt={"image":1}
 ```
---max-model-len 4096 --limit-mm-per-prompt '{"image": 1}'
-```
+
+**Formatting rules**:
+- ✅ Use `=` between flag and value
+- ✅ No spaces in JSON: `{"image":1}`
+- ✅ No quotes around arguments
+- ❌ Wrong: `--limit-mm-per-prompt '{"image": 1}'`
 
 **NOT using** `--dtype=float16`:
 - That was specific to AMD ROCm (Strix Halo) accelerators
 - NVIDIA GPUs auto-select optimal precision
 - Platform handles defaults better for NVIDIA
 
-### **4. Deployment Naming**
+### **4. Deployment Naming & Endpoints**
 - InferenceService name: `stardew-vlm`
-- Internal endpoint: `http://stardew-vlm:8080/v1`
+- **Service name**: `stardew-vlm-predictor` (adds `-predictor` suffix automatically)
+- **Internal endpoint**: `http://stardew-vlm-predictor:8080/v1`
   - Full DNS: `http://stardew-vlm-predictor.stardew-vision.svc.cluster.local:8080/v1`
-  - Short form works within namespace: `http://stardew-vlm:8080/v1`
+  - Short form (same namespace): `http://stardew-vlm-predictor:8080/v1`
+- **Model ID for API calls**: `stardew-vlm` (NOT `Qwen/Qwen2.5-VL-7B-Instruct`)
 
 ---
 
@@ -230,7 +271,55 @@ tolerations:
 # ❌ MISSING: nvidia.com/gpu toleration
 ```
 
-**InferenceService deleted** - will redeploy after HardwareProfile is fixed.
+**InferenceService deleted** - redeployed successfully after HardwareProfile and argument fixes.
+
+---
+
+### **Second Deployment Attempt - Successful** ✅
+
+**What Changed**:
+1. GPU HardwareProfile created in cluster provisioning
+2. Corrected vLLM argument format (see above)
+3. Model redeployed with GPU hardware profile selected
+
+**Timeline**:
+- Model download: ~3.5 minutes (14GB from HuggingFace)
+- Model loading: ~5 minutes (into GPU memory)
+- Total: ~8-10 minutes (GPU node already provisioned)
+
+**Verification Tests**:
+```bash
+# Test 1: Models endpoint
+oc exec -n stardew-vision stardew-vlm-predictor-<pod-id> -- \
+  curl http://localhost:8080/v1/models
+# ✅ Result: {"data":[{"id":"stardew-vlm","max_model_len":4096}]}
+
+# Test 2: Chat completion
+oc exec -n stardew-vision stardew-vlm-predictor-<pod-id> -- \
+  curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"stardew-vlm","messages":[{"role":"user","content":"What is 2+2?"}],"max_tokens":50}'
+# ✅ Result: {"choices":[{"message":{"content":"2 + 2 equals 4.","finish_reason":"stop"}}]}
+
+# Test 3: Service DNS resolution
+oc run nettest --image=curlimages/curl -n stardew-vision --rm -it -- \
+  curl http://stardew-vlm-predictor.stardew-vision.svc.cluster.local:8080/v1/models
+# ✅ Result: HTTP 200 OK, model list returned
+```
+
+**Pod Status**:
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+stardew-vlm-predictor-c8b76547f-xjbkk   1/1     Running   0          X min
+```
+
+**Service Endpoints**:
+```
+NAME                    ENDPOINTS          AGE
+stardew-vlm-predictor   10.128.2.21:8080   X min
+```
+
+**✅ All connectivity tests passing - ready for microservice deployment!**
 
 ---
 
@@ -265,21 +354,45 @@ tolerations:
 
 ## 🎯 **Next Steps (In Order)**
 
-### **Immediate (Cluster Provisioning)**
-1. ✅ Switch to cluster provisioning project (user doing this now)
-2. Add GPU HardwareProfile to provisioning script (YAML above)
-3. Decide: Re-provision cluster OR manually apply HardwareProfile
-4. Verify: `oc get hardwareprofiles -n redhat-ods-applications` shows GPU profile
+### **Completed** ✅
+1. ✅ Fixed GPU HardwareProfile in cluster provisioning
+2. ✅ Deployed vLLM with Qwen2.5-VL-7B-Instruct
+3. ✅ Fixed vLLM argument formatting
+4. ✅ Verified internal endpoint working
+5. ✅ Updated all documentation
 
-### **After HardwareProfile Fixed**
-5. Return to `stardew-vision` project in RHOAI dashboard
-6. Deploy model using `docs/DEPLOYING_MODELS_QUICKSTART.md`
-7. Select `nvidia-l40s-gpu` in Hardware profile dropdown
-8. Wait for deployment (~25-35 min first time: GPU node + download + load)
-9. Verify internal endpoint: `curl http://stardew-vlm:8080/v1/models`
-10. Deploy microservices (OCR, TTS, coordinator, webapp)
-11. Create external route for webapp only
-12. Test end-to-end with Pierre's shop screenshot
+### **Immediate (Deploy Microservices)**
+6. Update coordinator configuration with vLLM endpoint:
+   ```yaml
+   env:
+     - name: VLLM_ENDPOINT
+       value: "http://stardew-vlm-predictor:8080/v1"
+   ```
+
+7. Deploy microservices in order:
+   ```bash
+   oc apply -f configs/serving/openshift/10-deployment-ocr-tool.yaml
+   oc apply -f configs/serving/openshift/20-deployment-tts-tool.yaml
+   oc apply -f configs/serving/openshift/30-deployment-coordinator.yaml
+   oc apply -f configs/serving/openshift/40-deployment-webapp.yaml
+   ```
+
+8. Create external route for webapp:
+   ```bash
+   oc create route edge stardew-vision-webapp \
+     --service=webapp \
+     --port=8000 \
+     -n stardew-vision
+   
+   oc get route stardew-vision-webapp -n stardew-vision -o jsonpath='{.spec.host}'
+   ```
+
+9. Test end-to-end with Pierre's shop screenshot
+
+### **Optional Optimizations**
+- Configure PVC for model cache (avoid re-downloads on restart)
+- Add HuggingFace token secret for faster downloads
+- Monitor GPU utilization and adjust resources if needed
 
 ---
 
@@ -331,21 +444,54 @@ oc logs -n stardew-vision -l serving.kserve.io/inferenceservice=stardew-vlm -c k
 
 ### **Test Internal Endpoint**
 ```bash
-# From debug pod
+# Test from within a pod in same namespace
 oc run curl-test --image=curlimages/curl -n stardew-vision --rm -it -- \
-  curl http://stardew-vlm:8080/v1/models
+  curl http://stardew-vlm-predictor:8080/v1/models
+
+# Expected: {"object":"list","data":[{"id":"stardew-vlm",...}]}
+
+# Test chat completion
+oc run curl-test --image=curlimages/curl -n stardew-vision --rm -it -- \
+  curl -X POST http://stardew-vlm-predictor:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"stardew-vlm","messages":[{"role":"user","content":"What is 2+2?"}],"max_tokens":50}'
+
+# Expected: {"choices":[{"message":{"content":"2 + 2 equals 4."}}]}
 ```
 
 ---
 
 ## 💡 **Lessons Learned This Session**
 
+### **Infrastructure & Configuration**
 1. **RHOAI Projects ≠ Regular Namespaces**: Need `opendatahub.io/dashboard: true` label to appear in RHOAI UI
-2. **GPU HardwareProfile is Critical**: Without it, web UI doesn't show GPU options
-3. **Hardware Profile Must Exist Before Deployment**: Can't select GPU if profile doesn't exist
-4. **Internal Endpoint Naming**: `http://<deployment-name>-predictor:8080` OR `http://<deployment-name>:8080` (KServe convention)
-5. **Download Time is Predictable**: ~3.5 min for 14GB model, can add HF token for optimization
-6. **NVIDIA vs AMD vLLM Args**: Don't copy `--dtype` flags from AMD docs to NVIDIA deployments
+2. **GPU HardwareProfile is Critical**: Without it, web UI doesn't show GPU options in hardware profile dropdown
+3. **Hardware Profile Must Exist Before Deployment**: Can't select GPU if profile doesn't exist - check with `oc get hardwareprofiles -n redhat-ods-applications`
+
+### **Networking & Service Discovery**
+4. **Service Naming Convention**: InferenceService creates `<deployment-name>-predictor` service, NOT just `<deployment-name>`
+   - Deployment: `stardew-vlm`
+   - Service: `stardew-vlm-predictor`
+   - Endpoint: `http://stardew-vlm-predictor:8080/v1`
+5. **Model ID in vLLM**: API requests use deployment name (`stardew-vlm`), NOT HuggingFace model name (`Qwen/Qwen2.5-VL-7B-Instruct`)
+
+### **vLLM Arguments & Formatting**
+6. **Correct Argument Format** (CRITICAL):
+   - ✅ Use `=`: `--max-model-len=4096`
+   - ❌ Not space: `--max-model-len 4096`
+   - ✅ No spaces in JSON: `{"image":1}`
+   - ❌ Not: `{"image": 1}` or `'{"image": 1}'`
+   - ✅ No quotes around arguments in YAML list
+7. **NVIDIA vs AMD vLLM Args**: Don't copy `--dtype=float16` from AMD (ROCm) docs to NVIDIA deployments - NVIDIA auto-selects optimal precision
+
+### **Model Downloads & Performance**
+8. **Download Time is Predictable**: ~3.5 min for 14GB model (217 seconds @ ~65 MB/s)
+9. **HF Token Can Help**: Authenticated downloads may be prioritized by HuggingFace Hub
+10. **Ephemeral Storage = Re-downloads**: Without PVC, model re-downloads on every pod restart. Configure PVC for ~30 second restarts instead of ~3.5 minutes.
+
+### **Troubleshooting**
+11. **Pod on CPU Node**: If `RuntimeError: Failed to infer device type`, check pod has `nvidia.com/gpu: "1"` in resources and GPU tolerations
+12. **Argument Parsing Errors**: vLLM is strict about argument format - follow CLI conventions exactly
 
 ---
 

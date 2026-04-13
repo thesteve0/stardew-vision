@@ -7,7 +7,7 @@ metadata:
     app: stardew-vision
     component: ocr-tool
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       component: ocr-tool
@@ -17,19 +17,47 @@ spec:
         app: stardew-vision
         component: ocr-tool
     spec:
+      initContainers:
+        - name: download-paddlex-models
+          image: ghcr.io/thesteve0/stardew-ocr-tool:v0.12.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              uv run python -c "from stardew_ocr.crop_pierres_detail_panel import _load_ocr; _load_ocr()" || true
+          env:
+            - name: HF_HOME
+              value: /cache/huggingface
+            - name: PADDLEX_HOME
+              value: /cache/paddlex
+            - name: PADDLE_PDX_CACHE_HOME
+              value: /cache/paddlex
+            - name: PADDLE_OCR_BASE_DIR
+              value: /cache/paddleocr
+          volumeMounts:
+            - name: model-cache
+              mountPath: /cache
       containers:
         - name: ocr
-          image: ghcr.io/thesteve0/stardew-ocr-tool:v0.1.0
+          image: ghcr.io/thesteve0/stardew-ocr-tool:v0.11.0
           ports:
             - containerPort: 8002
               protocol: TCP
+          env:
+            - name: HF_HOME
+              value: /cache/huggingface
+            - name: PADDLEX_HOME
+              value: /cache/paddlex
+            - name: PADDLE_PDX_CACHE_HOME
+              value: /cache/paddlex
+            - name: PADDLE_OCR_BASE_DIR
+              value: /cache/paddleocr
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
-            limits:
               cpu: 1000m
               memory: 2Gi
+            limits:
+              cpu: 2500m
+              memory: 6Gi
           livenessProbe:
             httpGet:
               path: /health
@@ -43,13 +71,12 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           volumeMounts:
-            - name: templates
-              mountPath: /app/datasets/assets/templates
-              readOnly: true
+            - name: model-cache
+              mountPath: /cache
       volumes:
-        - name: templates
-          configMap:
-            name: ocr-templates
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: paddlex-cache
 ---
 apiVersion: v1
 kind: Service

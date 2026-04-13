@@ -1,0 +1,43 @@
+# GPU HardwareProfile for OpenShift AI
+# This should be created by cluster provisioning script in redhat-ods-applications namespace
+# Included here for documentation and manual deployment if needed
+---
+apiVersion: infrastructure.opendatahub.io/v1
+kind: HardwareProfile
+metadata:
+  name: nvidia-l40s-gpu
+  namespace: redhat-ods-applications
+  annotations:
+    opendatahub.io/description: "NVIDIA L40S GPU with 8 CPUs and 32 GiB memory"
+    opendatahub.io/display-name: "NVIDIA L40S GPU"
+    opendatahub.io/disabled: "false"
+    opendatahub.io/managed: "false"
+  labels:
+    app.kubernetes.io/part-of: hardwareprofile
+    app.opendatahub.io/hardwareprofile: "true"
+spec:
+  identifiers:
+    - identifier: cpu
+      displayName: CPU
+      resourceType: CPU
+      defaultCount: 4
+      minCount: 2
+      maxCount: 8
+    - identifier: memory
+      displayName: Memory
+      resourceType: Memory
+      defaultCount: 24Gi
+      minCount: 16Gi
+      maxCount: 64Gi
+    - identifier: nvidia.com/gpu
+      displayName: NVIDIA GPU
+      resourceType: GPU
+      defaultCount: 1
+      minCount: 1
+      maxCount: 1
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule

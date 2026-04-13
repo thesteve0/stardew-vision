@@ -210,6 +210,137 @@ curl http://localhost:8001/v1/models
 
 Expected response: JSON with model info including `"id": "Qwen/Qwen2.5-VL-7B-Instruct"`
 
+---
+
+## OpenShift AI Deployment Architecture
+
+**Status**: Deployed and operational as of 2026-04-13
+
+The application is deployed on OpenShift AI as a microservices architecture with the following components:
+
+### Architecture Overview
+
+```
+Internet → OpenShift Route (3m timeout)
+  ↓
+Coordinator Service (port 8000, 1 replica)
+  ├→ OCR Tool Service (port 8002, 1 replica, CPU-only)
+  ├→ TTS Tool Service (port 8003, 1 replica, CPU-only)
+  └→ vLLM Predictor (KServe InferenceService, GPU)
+```
+
+### Services
+
+**1. vLLM Serving (KServe InferenceService)**
+- Model: `Qwen/Qwen2.5-VL-7B-Instruct` from HuggingFace
+- Runtime: Red Hat AI Inference Service (RHAI IS) vLLM CUDA runtime
+- GPU: 1× NVIDIA GPU, 32Gi memory
+- Port: 8080 (internal), served at `http://stardew-vlm-predictor:8080/v1`
+- Custom chat template: Mounted from ConfigMap (Hermes-compatible tool calling format)
+- vLLM args: `--max-model-len=4096 --limit-mm-per-prompt={"image":1} --enable-auto-tool-choice --tool-call-parser=hermes`
+
+**2. OCR Tool Service**
+- Image: `ghcr.io/thesteve0/stardew-ocr-tool:v0.12.0`
+- Resources: 1000m CPU, 4Gi memory request, 2500m CPU, 8Gi memory limit
+- PVC: `paddlex-cache` (2Gi) for PaddleOCR models
+- Init container: Pre-downloads models on pod startup
+- Model caching: PaddleOCR instance cached in memory (first request ~30s, subsequent ~2s)
+- Environment: `FLAGS_use_mkldnn=0` (OneDNN disabled for CPU portability)
+
+**3. TTS Tool Service**
+- Image: `ghcr.io/thesteve0/stardew-tts-tool:v0.4.0`
+- Resources: 1000m CPU, 1Gi memory request, 2000m CPU, 2Gi memory limit
+- PVC: `hf-cache` (2Gi, shared) for Kokoro TTS models
+- Init container: Pre-downloads models on pod startup
+
+**4. Coordinator Service**
+- Image: `ghcr.io/thesteve0/stardew-coordinator:v0.6.0`
+- Resources: 500m CPU, 512Mi memory request, 1000m CPU, 1Gi memory limit
+- ConfigMap: `service-endpoints` (OCR_TOOL_URL, TTS_TOOL_URL, VLLM_BASE_URL, VLLM_MODEL)
+- PVC: `error-screenshots` (5Gi) for failed extractions
+- Route timeout: 3 minutes (annotation: `haproxy.router.openshift.io/timeout: 3m`)
+
+### Persistent Volumes
+
+1. **paddlex-cache** (2Gi, RWO): PaddleOCR + PaddleX models
+2. **hf-cache** (2Gi, RWO): HuggingFace models for TTS
+3. **error-screenshots** (5Gi, RWO): Failed extractions with debug output
+
+### Performance Characteristics
+
+**First request after pod restart:**
+- VLM inference: ~1s
+- OCR (with model loading): ~30s
+- TTS: ~3s
+- **Total**: ~35-40s
+
+**Subsequent requests (models cached in memory):**
+- VLM inference: ~1s
+- OCR (cached instance): ~2s
+- TTS: ~3s
+- **Total**: ~5-7s
+
+### Deployment Commands
+
+```bash
+# Create namespace
+kubectl create namespace stardew-vision
+
+# Deploy in order (dependencies matter)
+kubectl apply -f configs/serving/openshift/02-pvc-paddlex-cache.yaml
+kubectl apply -f configs/serving/openshift/03-pvc-hf-cache.yaml
+kubectl apply -f configs/serving/openshift/04-pvc-errors.yaml
+kubectl apply -f configs/serving/openshift/01-configmap-endpoints.yaml
+kubectl apply -f configs/serving/openshift/vllm/04-configmap-chat-template.yaml
+kubectl apply -f configs/serving/openshift/vllm/02-servingruntime-with-template.yaml
+kubectl apply -f configs/serving/openshift/vllm/03-inferenceservice.yaml
+kubectl apply -f configs/serving/openshift/10-deployment-ocr-tool.yaml
+kubectl apply -f configs/serving/openshift/20-deployment-tts-tool.yaml
+kubectl apply -f configs/serving/openshift/30-deployment-coordinator.yaml
+```
+
+### Monitoring and Debugging
+
+**Check pod status:**
+```bash
+kubectl get pods -n stardew-vision
+```
+
+**View coordinator logs with timing:**
+```bash
+kubectl logs -n stardew-vision deployment/coordinator -f | grep "⏱️"
+```
+
+**Check OCR tool logs:**
+```bash
+kubectl logs -n stardew-vision deployment/ocr-tool -f
+```
+
+**Test OCR service directly:**
+```bash
+python data/scripts/evaluation/test_ocr_service.py datasets/pierre_shop/images/IMG_7710.jpg \
+  --url https://stardew-vision-stardew-vision.apps.your-cluster.com
+```
+
+**Access web UI:**
+Route URL available at: `https://stardew-vision-stardew-vision.apps.<cluster-domain>`
+
+### Critical Lessons Learned
+
+1. **OpenShift Random UID**: Containers run as random UIDs (e.g., 1000860000). Cannot write to root directories. All cache/temp directories must point to `/tmp` or mounted PVCs. Environment variables must be set in Python code via `os.environ.setdefault()` before imports, not just in Dockerfile `ENV`.
+
+2. **MKLDNN/OneDNN CPU Incompatibility**: PaddlePaddle compiled with Intel MKLDNN optimizations causes `SIGTERM` on incompatible CPUs. Must disable with `FLAGS_use_mkldnn=0` for portability. Cost: 2-4x slower CPU inference.
+
+3. **Model Instance Caching**: Loading PaddleOCR from disk takes ~30s per request. Cache the instance in a module-level variable (`_OCR_INSTANCE = None`) to reduce subsequent requests to ~2s.
+
+4. **Route Timeout**: Default OpenShift Route timeout is 30s. First request takes ~35-40s with model loading. Must set `haproxy.router.openshift.io/timeout: 3m` annotation.
+
+5. **HuggingFace Cache**: PaddleX downloads models from HuggingFace. Must set `HF_HOME=/cache/huggingface` or downloads fail with "Permission denied (os error 13)".
+
+See [LESSONS_LEARNED.md](LESSONS_LEARNED.md) for detailed troubleshooting guide and [ADR-012](docs/adr/012-openshift-deployment-architecture.md) for full architecture documentation.
+
+---
+
 ## Overall intstructions
 ## Bash Conventions
 - Do not append `| tail -N` or `| head -N` to commands unless the output is expected to exceed 500 lines

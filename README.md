@@ -56,7 +56,26 @@ docs/adr/       # Architecture Decision Records (ADR-009 is the core design)
 configs/        # Training configs, output schemas
 ```
 
-## Setup
+## Deployment
+
+**Production Environment:** Red Hat OpenShift AI 3.2+ with NVIDIA L40S GPUs
+
+### OpenShift AI Deployment
+
+Complete guides for deploying to OpenShift AI:
+
+- **[Deployment Summary](docs/DEPLOYMENT_SUMMARY.md)** — Issues fixed, final configuration, production status
+- **[KServe Deployment Guide](docs/DEPLOYING_MODELS_KSERVE.md)** — Detailed step-by-step deployment
+- **[Quick Start Guide](docs/DEPLOYING_MODELS_QUICKSTART.md)** — Fast-track for experienced users
+
+**Architecture:**
+- vLLM serving Qwen2.5-VL-7B-Instruct (GPU-accelerated, tool calling enabled)
+- Coordinator agent runtime (3 replicas)
+- OCR tool (PaddleOCR + OpenCV, 2 replicas)
+- TTS tool (Kokoro, 2 replicas)
+- All services internal-only except webapp (OpenShift Route with TLS)
+
+### Local Development Setup
 
 This project runs in a ROCm devcontainer on AMD Strix Halo hardware.
 
@@ -105,24 +124,27 @@ Then open `http://localhost:8000` and upload a Pierre's shop screenshot.
 
 | Component | Status |
 |-----------|--------|
-| Pierre's shop OCR extraction | Complete — 93% field accuracy |
-| Agent loop (FastAPI + Qwen) | In progress |
-| TTS tool (MeloTTS) | Not started |
-| Web app | Not started |
-| Fine-tuning (LoRA) | Not started |
+| Pierre's shop OCR extraction | ✅ Complete — 8/8 tests passing |
+| Agent loop (FastAPI + Qwen) | ✅ Complete — deployed to production |
+| TTS tool (Kokoro) | ✅ Complete — deployed to production |
+| Web app | ✅ Complete — deployed to production |
+| Fine-tuning (LoRA) | Planned for Phase 2 |
+| **Production Deployment** | ✅ **Live on OpenShift AI** |
 
-See [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) for full detail.
+**Deployment URL:** `https://stardew-vision-stardew-vision.apps.stardew-vision.sandbox5291.opentlc.com`
+
+See [`docs/DEPLOYMENT_SUMMARY.md`](docs/DEPLOYMENT_SUMMARY.md) for complete deployment details.
 
 ## Key Technical Decisions
 
 | Decision | Choice |
 |----------|--------|
-| VLM orchestrator | Qwen2.5-VL-7B-Instruct (FP16, LoRA) |
+| VLM orchestrator | Qwen2.5-VL-7B-Instruct (FP16) |
 | Agent loop | Raw OpenAI client — no framework |
 | OCR | PaddleOCR PP-OCRv5, CPU-only |
-| TTS | MeloTTS-English, CPU |
-| Serving | vLLM (local) + KServe on OpenShift AI |
-| Precision | FP16 only — ROCm 7.2 constraint |
+| TTS | Kokoro (CPU, MIT license) |
+| Serving | vLLM (local dev) + KServe on OpenShift AI (production) |
+| Precision | FP16 only — ROCm 7.2 constraint (local dev) |
 
 Full rationale in [`docs/adr/`](docs/adr/).
 

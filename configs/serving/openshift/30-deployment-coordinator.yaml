@@ -7,7 +7,7 @@ metadata:
     app: stardew-vision
     component: coordinator
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       component: coordinator
@@ -19,19 +19,13 @@ spec:
     spec:
       containers:
         - name: coordinator
-          image: ghcr.io/thesteve0/stardew-coordinator:v0.1.0
+          image: ghcr.io/thesteve0/stardew-coordinator:v0.6.0
           ports:
             - containerPort: 8000
               protocol: TCP
-          env:
-            - name: OCR_TOOL_URL
-              value: http://ocr-tool:8002
-            - name: TTS_TOOL_URL
-              value: http://tts-tool:8003
-            - name: VLLM_BASE_URL
-              value: http://vllm-qwen-predictor-default.stardew-vision.svc.cluster.local/v1
-            - name: VLLM_MODEL
-              value: Qwen/Qwen2.5-VL-7B-Instruct
+          envFrom:
+            - configMapRef:
+                name: service-endpoints
           resources:
             requests:
               cpu: 500m
@@ -77,6 +71,10 @@ kind: Route
 metadata:
   name: stardew-vision
   namespace: stardew-vision
+  annotations:
+    # Increase timeout for first request (OCR model loading takes ~30s)
+    # Subsequent requests are fast (~5-10s total) once models are in memory
+    haproxy.router.openshift.io/timeout: 3m
 spec:
   to:
     kind: Service

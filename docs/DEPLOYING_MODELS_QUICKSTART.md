@@ -78,7 +78,7 @@ EOF
 | | Model route | ❌ **UNCHECK** (internal only) |
 | | Token auth | ❌ **UNCHECK** (no auth) |
 | **3. Advanced settings** | Add as AI asset endpoint | ☑️ Check (optional) |
-| | Custom runtime arguments | `--max-model-len 4096 --limit-mm-per-prompt '{"image": 1}'` |
+| | Custom runtime arguments | `--max-model-len=4096 --limit-mm-per-prompt={"image":1} --enable-auto-tool-choice --tool-call-parser=hermes` |
 | | Environment variables | Leave defaults (or add HF_TOKEN if needed) |
 | **4. Review** | | Verify settings, click **Deploy** |
 
@@ -98,12 +98,16 @@ oc get pods -n stardew-vision -l serving.kserve.io/inferenceservice=stardew-vlm
 
 # Test internal endpoint
 oc run curl-test --image=curlimages/curl -n stardew-vision --rm -it -- \
-  curl http://stardew-vlm:8080/v1/models
+  curl http://stardew-vlm-predictor:8080/v1/models
 
-# Expected: {"object":"list","data":[{"id":"Qwen/Qwen2.5-VL-7B-Instruct",...}]}
+# Expected: {"object":"list","data":[{"id":"stardew-vlm",...}]}
 ```
 
-**Internal endpoint:** `http://stardew-vlm:8080/v1`
+**Internal endpoint:** `http://stardew-vlm-predictor:8080/v1`
+
+**Important:** 
+- Service name includes `-predictor` suffix
+- Model ID is deployment name (`stardew-vlm`), not HuggingFace model name
 
 ---
 
@@ -115,7 +119,7 @@ Update coordinator config with vLLM endpoint:
 # configs/serving/openshift/30-deployment-coordinator.yaml
 env:
   - name: VLLM_ENDPOINT
-    value: "http://stardew-vlm:8080/v1"  # No token needed
+    value: "http://stardew-vlm-predictor:8080/v1"  # No token needed
 ```
 
 Deploy stack:
@@ -187,11 +191,11 @@ oc logs -n stardew-vision \
 ```
 ┌─ stardew-vision namespace (all internal) ──────────────────┐
 │                                                             │
-│  stardew-vlm:8080 ← coordinator:8000 ← webapp:8000         │
-│  (vLLM inference)    (agent loop)       (FastAPI)          │
-│                           ↓                  ↓              │
-│                    ocr-tool:8000      [External Route] ─────┼─→ Internet
-│                    tts-tool:8000            ↑              │
+│  stardew-vlm-predictor:8080 ← coordinator:8000 ← webapp    │
+│  (vLLM inference)              (agent loop)      (FastAPI) │
+│                                     ↓                ↓      │
+│                              ocr-tool:8000   [External Route]─→ Internet
+│                              tts-tool:8000          ↑       │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -217,10 +221,12 @@ oc logs -n stardew-vision \
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | **Deployment name** | `stardew-vlm` | Determines service name |
-| **Internal endpoint** | `http://stardew-vlm:8080/v1` | For coordinator |
+| **Service name** | `stardew-vlm-predictor` | Deployment name + `-predictor` |
+| **Internal endpoint** | `http://stardew-vlm-predictor:8080/v1` | For coordinator |
+| **Model ID** | `stardew-vlm` | Use in API calls, NOT HF model name |
 | **Model download time** | ~3.5 min | 14GB @ ~65 MB/s |
 | **Total first deploy** | 25-35 min | GPU provision + download + load |
-| **vLLM args** | `--max-model-len 4096 --limit-mm-per-prompt '{"image": 1}'` | Vision + context |
+| **vLLM args** | `--max-model-len=4096 --limit-mm-per-prompt={"image":1} --enable-auto-tool-choice --tool-call-parser=hermes` | Correct format! |
 | **No dtype flag** | (auto) | NVIDIA auto-selects (FP16 AMD-specific) |
 
 ---

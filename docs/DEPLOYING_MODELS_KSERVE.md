@@ -72,7 +72,7 @@ All services in this project run in the **same namespace** (`stardew-vision`) wi
 │  stardew-vision namespace (OpenShift AI Project)        │
 │                                                          │
 │  ┌────────────────────────────────────────────┐         │
-│  │  stardew-vlm:8080                          │         │
+│  │  stardew-vlm-predictor:8080                │         │
 │  │  (Qwen2.5-VL-7B via vLLM + KServe)        │         │
 │  │  - InferenceService (RawDeployment)        │         │
 │  │  - No external route                       │         │
@@ -413,12 +413,21 @@ Click **Next** →
    
    **Additional serving runtime arguments:**
    ```
-   --max-model-len 4096 --limit-mm-per-prompt '{"image": 1}'
+   --max-model-len=4096 --limit-mm-per-prompt={"image":1} --enable-auto-tool-choice --tool-call-parser=hermes
    ```
    
    **What these do:**
-   - `--max-model-len 4096`: Context window size (4K tokens)
-   - `--limit-mm-per-prompt '{"image": 1}'`: Enable vision input (1 image per prompt)
+   - `--max-model-len=4096`: Context window size (4K tokens)
+   - `--limit-mm-per-prompt={"image":1}`: Enable vision input (1 image per prompt)
+   - `--enable-auto-tool-choice`: Enable automatic tool calling mode (required for agent loops)
+   - `--tool-call-parser=hermes`: Use Hermes parser for tool call extraction
+   
+   **Critical formatting rules:**
+   - ✅ Use `=` between flag and value: `--flag=value`
+   - ✅ No spaces in JSON: `{"image":1}` not `{"image": 1}`
+   - ✅ No quotes around the entire argument
+   - ❌ Wrong: `--limit-mm-per-prompt '{"image": 1}'`
+   - ✅ Correct: `--limit-mm-per-prompt={"image":1}`
    
    **Note:** We do NOT specify `--dtype=float16` here. That was specific to AMD ROCm accelerators (Strix Halo). NVIDIA GPUs auto-select the optimal precision.
 
@@ -511,14 +520,15 @@ Based on deployment name `stardew-vlm`, the internal endpoint is:
 
 - **Full DNS**: `http://stardew-vlm-predictor.stardew-vision.svc.cluster.local:8080/v1`
 - **Short form** (same namespace): `http://stardew-vlm-predictor:8080/v1`
-- **Even shorter** (KServe convention): `http://stardew-vlm:8080/v1`
 
 **For coordinator configuration:**
 ```yaml
 env:
   - name: VLLM_ENDPOINT
-    value: "http://stardew-vlm:8080/v1"  # No token needed!
+    value: "http://stardew-vlm-predictor:8080/v1"  # No token needed!
 ```
+
+**Note:** The service name is `<deployment-name>-predictor`, NOT just the deployment name. Always use the `-predictor` suffix.
 
 #### Test from Cluster
 
@@ -529,16 +539,17 @@ Create a debug pod to test internal connectivity:
 oc run curl-test --image=curlimages/curl -n stardew-vision --rm -it -- sh
 
 # Test 1: Check model is loaded
-curl http://stardew-vlm:8080/v1/models
+curl http://stardew-vlm-predictor:8080/v1/models
 
 # Expected output:
-# {"object":"list","data":[{"id":"Qwen/Qwen2.5-VL-7B-Instruct",...}]}
+# {"object":"list","data":[{"id":"stardew-vlm",...}]}
+# Note: Model ID is the deployment name, not the HuggingFace model name
 
 # Test 2: Simple text inference
-curl -X POST http://stardew-vlm:8080/v1/chat/completions \
+curl -X POST http://stardew-vlm-predictor:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "model": "stardew-vlm",
     "messages": [
       {"role": "user", "content": "What is 2+2?"}
     ],
@@ -549,6 +560,8 @@ curl -X POST http://stardew-vlm:8080/v1/chat/completions \
 ```
 
 **No authentication needed** - internal services trust the namespace boundary.
+
+**Important:** The model ID in API requests is the deployment name (`stardew-vlm`), not the HuggingFace model name (`Qwen/Qwen2.5-VL-7B-Instruct`).
 
 ---
 
@@ -564,7 +577,7 @@ oc apply -f configs/serving/openshift/10-deployment-ocr-tool.yaml
 oc apply -f configs/serving/openshift/20-deployment-tts-tool.yaml
 
 # Coordinator agent runtime (internal only)
-# Update VLLM_ENDPOINT to: http://stardew-vlm:8080/v1
+# Update VLLM_ENDPOINT to: http://stardew-vlm-predictor:8080/v1
 oc apply -f configs/serving/openshift/30-deployment-coordinator.yaml
 
 # Webapp frontend (will have external route)
@@ -812,4 +825,9 @@ oc logs -n stardew-vision \
 
 **Deployment successful!** 🎉
 
-Your VLM is now serving at `http://stardew-vlm:8080/v1` for internal microservice calls.
+Your VLM is now serving at `http://stardew-vlm-predictor:8080/v1` for internal microservice calls.
+
+**Key Facts:**
+- Service name: `stardew-vlm-predictor` (deployment name + `-predictor` suffix)
+- Model ID for API calls: `stardew-vlm` (deployment name, not HuggingFace model name)
+- No authentication required for internal traffic

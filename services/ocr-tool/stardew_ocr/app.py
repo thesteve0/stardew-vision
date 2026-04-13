@@ -7,6 +7,26 @@ keeping OCR dependencies isolated from the coordinator and TTS service.
 
 from __future__ import annotations
 
+# CRITICAL: Set PaddleX and HuggingFace environment variables BEFORE any imports
+# PaddleX computes cache paths at module import time, so these MUST be set first
+import os
+os.environ.setdefault('PADDLEX_HOME', '/tmp/.paddlex')
+os.environ.setdefault('PADDLE_PDX_CACHE_HOME', '/tmp/.paddlex')  # Alternative var name
+os.environ.setdefault('PADDLEX_CACHE_DIR', '/tmp/.paddlex/cache')
+os.environ.setdefault('PADDLE_HUB_HOME', '/tmp/.paddlex/hub')
+os.environ.setdefault('PADDLE_OCR_BASE_DIR', '/tmp/.paddleocr')
+
+# HuggingFace cache for PaddleX model downloads
+# Without this, PaddleX tries to write to /.cache/huggingface which fails in OpenShift
+os.environ.setdefault('HF_HOME', '/tmp/.huggingface')
+
+# Disable MKLDNN/OneDNN optimizations to avoid CPU architecture incompatibilities
+# in Kubernetes/OpenShift environments. MKLDNN requires specific CPU instruction sets
+# (AVX, AVX2) that may not be available on all cluster nodes, causing SIGTERM crashes.
+# See: https://github.com/PaddlePaddle/PaddleOCR/issues/16789
+os.environ.setdefault('FLAGS_use_mkldnn', '0')
+os.environ.setdefault('FLAGS_use_xdnn', '0')
+
 import logging
 
 from fastapi import FastAPI
