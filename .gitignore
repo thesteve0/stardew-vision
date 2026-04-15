@@ -214,7 +214,7 @@ GETTING_STARTED.md
 # Do NOT ignore template_docs/ - users need these docs
 
 # Stardew Vision project-specific ignores
-# datasets/ is intentionally tracked (contains anchor templates and training data)
+# datasets/, training/, and data/ moved to stardew-vision-training repo
 # models/ and mlruns/ are host-volume-mounted and not committed to git
 models/
 mlruns/

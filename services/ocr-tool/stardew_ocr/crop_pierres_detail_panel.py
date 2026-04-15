@@ -31,10 +31,10 @@ import numpy as np
 # Paths
 # ---------------------------------------------------------------------------
 
-# Templates are baked into container image at /app/datasets/assets/templates
-# For local development, they're at repo_root/datasets/assets/templates
+# Templates are baked into container image at /app/assets/templates
+# Self-contained within the ocr-tool service
 import os
-_TEMPLATES_DIR = Path(os.getenv("TEMPLATES_DIR", "/app/datasets/assets/templates"))
+_TEMPLATES_DIR = Path(os.getenv("TEMPLATES_DIR", "/app/assets/templates"))
 _LAYOUT_FILE = _TEMPLATES_DIR / "pierre_panel_layout.json"
 _TEMPLATE_FILE = _TEMPLATES_DIR / "pierres_detail_panel_corner.png"
 

@@ -20,7 +20,7 @@ RUN uv sync --no-dev
 COPY services/ocr-tool/stardew_ocr/ ./stardew_ocr/
 
 # Copy OpenCV template images (self-contained service)
-COPY datasets/assets/templates/ ./datasets/assets/templates/
+COPY services/ocr-tool/assets/ ./assets/
 
 ENV PYTHONPATH=/app
 ENV UV_CACHE_DIR=/tmp/.uv

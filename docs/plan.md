@@ -20,6 +20,8 @@
 - Evaluate fine-tuned model vs. zero-shot baseline
 - Deploy fine-tuned model to OpenShift AI (replace base model)
 
+**Note**: Training, dataset preparation, and evaluation now live in the **[stardew-vision-training](https://github.com/thesteve0/stardew-vision-training)** repository. This repo contains application/serving code only.
+
 ## vLLM Start Command (Run on Host Machine)
 
 **Architecture Decision (2026-04-03):** vLLM runs in Docker container on the **host machine** (not in devcontainer) due to gfx1151 (Strix Halo) ROCm compatibility. The devcontainer connects to vLLM via forwarded port 8001.
@@ -175,86 +177,51 @@ Full rationale in `docs/adr/`. Summary:
 
 ## Repository Structure
 
+**This repository** (application/serving):
+
 ```
 stardew-vision/
-├── .devcontainer/             # ROCm devcontainer config (do not modify casually)
-├── docs/
-│   ├── adr/                   # Architecture Decision Records
-│   │   ├── 001-vlm-selection.md
-│   │   ├── 002-vlm-role-architecture.md  (Superseded by 009)
-│   │   ├── 003-tts-selection.md
-│   │   ├── 004-repo-structure.md
-│   │   ├── 005-serving-strategy.md
-│   │   ├── 006-feature-store-strategy.md
-│   │   ├── 007-overlay-detection-strategy.md  (Deferred)
-│   │   ├── 008-grid-detection-strategy.md     (Deferred)
-│   │   ├── 009-agent-tool-calling-architecture.md
-│   │   └── 010-screen-region-extraction.md
-│   ├── plan.md                # This file
-│   ├── talk-abstract.md       # Conference talk abstract
-│   ├── evaluation-rubric.md   # Metrics and thresholds
-│   ├── data-collection-plan.md  # Data strategy (screen-type screenshots)
-│   └── dataset-guide.md       # Annotation schema + contribution guide
-├── datasets/                  # Host volume mount — NOT committed to git
-│   ├── assets/
-│   │   ├── templates/         # OpenCV anchor templates per screen type
-│   │   └── ...
-│   ├── raw/                   # Screenshots (screen-type labeled)
-│   ├── annotated/             # JSONL annotation files
-│   └── splits/                # train/val/test manifests
-├── models/                    # Host volume mount — NOT committed to git
-│   ├── base/                  # Downloaded base checkpoints
-│   └── fine-tuned/            # LoRA adapter checkpoints
-├── configs/
-│   ├── training/
-│   │   ├── finetune_config.yaml           # Qwen2.5-VL-7B LoRA config
-│   │   └── finetune_config_smolvlm2.yaml  # SmolVLM2 TRL config
-│   ├── output_schema.json                 # Per-screen-type JSON schemas
+├── .devcontainer/             # ROCm devcontainer config (local development)
+├── services/                  # Microservices architecture
+│   ├── coordinator/           # Agent loop runtime (FastAPI)
+│   │   ├── Dockerfile
+│   │   ├── pyproject.toml
+│   │   └── stardew_coordinator/
+│   ├── ocr-tool/              # Pierre's shop OCR extraction
+│   │   ├── Dockerfile
+│   │   ├── pyproject.toml
+│   │   ├── assets/templates/  # OpenCV templates (self-contained)
+│   │   └── stardew_ocr/
+│   └── tts-tool/              # Text-to-speech synthesis
+│       ├── Dockerfile
+│       ├── pyproject.toml
+│       └── stardew_tts/
+├── deploy/                    # OpenShift manifests, Docker configs
+├── configs/                   # Serving configs (KServe, vLLM, output schemas)
 │   └── serving/
-│       ├── vllm_local.yaml
 │       └── openshift/
-│           ├── serving_runtime.yaml
-│           └── inference_service.yaml
-├── notebooks/
-│   ├── 01_dataset_exploration.ipynb
-│   ├── 02_vlm_baseline_comparison.ipynb   # Key talk artifact
-│   ├── 03_finetuning_analysis.ipynb
-│   └── 04_evaluation_results.ipynb
-├── scripts/
-│   ├── resolve-dependencies.py  # (exists)
-│   ├── collect_screen_screenshots.py  # Guided screenshot collection tool
-│   ├── validate_dataset.py
-│   ├── run_baseline_eval.py
-│   └── push_to_hf.py
-├── src/
-│   └── stardew_vision/          # Main Python package
-│       ├── tools/
-│       │   ├── __init__.py          # Tool registry
-│       │   ├── crop_pierres_detail_panel.py  # OpenCV crop + EasyOCR
-│       │   ├── crop_tv_dialog.py             # Phase 2
-│       │   └── crop_inventory_tooltip.py     # Phase 3
-│       ├── models/
-│       │   ├── vlm_wrapper.py       # Orchestrator VLM inference (tool-calling)
-│       │   ├── finetune.py          # LoRA training loop (Qwen)
-│       │   └── finetune_smolvlm.py  # TRL SFTTrainer (SmolVLM2)
-│       ├── tts/
-│       │   └── synthesize.py        # text → WAV bytes via MeloTTS
-│       ├── serving/
-│       │   └── inference.py         # vLLM OpenAI-client wrapper + tool dispatch
-│       └── webapp/
-│           ├── app.py               # FastAPI app
-│           ├── routes.py            # POST /analyze → audio/wav
-│           └── static/
-│               └── index.html       # Upload form + audio player
-├── tests/
-│   ├── fixtures/                    # Test screenshots for unit tests
-│   ├── test_tools.py                # Extraction agent unit tests
-│   ├── test_vlm_wrapper.py
-│   ├── test_tts.py
-│   └── test_webapp.py
-├── main.py                          # CLI entrypoint
-├── pyproject.toml                   # Dependencies (preserve exclude-dependencies)
-└── CLAUDE.md                        # Claude Code context (references this file)
+├── docs/                      # ADRs, deployment guides
+│   ├── adr/                   # Architecture Decision Records
+│   ├── plan.md                # This file
+│   └── ...
+├── tests/                     # Pytest suite
+│   └── fixtures/              # Test screenshots
+├── demos/                     # Conference demo examples
+├── models/                    # Host volume — fine-tuned checkpoints (not in git)
+├── pyproject.toml             # Dev dependencies
+└── CLAUDE.md                  # Claude Code context
+```
+
+**Training repository** ([stardew-vision-training](https://github.com/thesteve0/stardew-vision-training)):
+
+```
+stardew-vision-training/
+├── datasets/                  # Screenshots, annotations, sprites
+├── fine_tuning/               # LoRA training scripts (Qwen2.5-VL)
+├── evaluation/                # Quality metrics, benchmarks
+├── synthetic_data/            # LLM-based data augmentation
+├── experiments/               # MLFlow tracking
+└── scripts/                   # Annotation, data prep tools
 ```
 
 ---

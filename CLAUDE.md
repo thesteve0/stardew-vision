@@ -24,30 +24,32 @@ This file provides context to Claude Code when working on this project.
 **Full project plan**: See [`docs/plan.md`](docs/plan.md) — the authoritative reference for architecture, implementation sequence, and decisions.
 **Architecture decisions**: See [`docs/adr/`](docs/adr/) — ADRs 001-010 document all major choices and their rationale. ADR-009 and ADR-010 are the current architecture.
 
+## Related Repositories
+
+**[stardew-vision-training](https://github.com/thesteve0/stardew-vision-training)**: Model fine-tuning, dataset preparation, and evaluation
+- **Purpose**: VLM LoRA training, synthetic data generation, evaluation metrics
+- **Contains**: datasets/, fine_tuning/, evaluation/, annotation scripts
+- **Output**: Fine-tuned LoRA adapters uploaded to HuggingFace Hub, consumed by this application repo
+
 ## Codebase Structure
 
 ```
-src/
-└── stardew_vision/
-    ├── tools/       # Extraction agents: crop_pierres_detail_panel, crop_tv_dialog, etc.
-    ├── models/      # VLM orchestrator wrapper, LoRA fine-tuning (Qwen + SmolVLM2)
-    ├── tts/         # MeloTTS synthesize.py
-    ├── serving/     # vLLM OpenAI-client wrapper + tool dispatch logic
-    └── webapp/      # FastAPI app, routes, static HTML
-data/
-├── scripts/
-│   ├── annotation/  # Annotation generation + review tools
-│   ├── evaluation/  # OCR and template matching quality metrics
-│   └── visualization/ # Sprite browser, annotation viewer
-└── dev/             # Debug and smoke-test scripts
-demos/               # Conference demo examples (agent-learning modules)
-training/            # Placeholder — will become stardew-vision-training repo
-deploy/              # Deployment scripts and manifests (start_vllm_host.sh, docker-compose)
-datasets/            # Host volume — screenshots, annotations, OpenCV anchor templates
-models/              # Host volume — base + fine-tuned LoRA checkpoints
-configs/             # Output schemas, OpenShift serving manifests
-docs/                # ADRs, plan, data-collection-plan, evaluation rubric
+services/
+├── coordinator/     # Agent loop runtime (FastAPI)
+│   └── stardew_coordinator/
+├── ocr-tool/        # Pierre's shop OCR extraction (self-contained microservice)
+│   ├── stardew_ocr/
+│   └── assets/templates/  # OpenCV templates (baked into container)
+└── tts-tool/        # Text-to-speech synthesis
+    └── stardew_tts/
+deploy/              # OpenShift manifests, Docker configs
+configs/             # Serving configs (KServe, vLLM, output schemas)
+docs/                # ADRs, plan, deployment guides
+demos/               # Conference demo examples
+tests/               # Pytest suite
 ```
+
+**Note**: This repo contains **application/serving code only**. Training, datasets, and evaluation tools live in the separate [`stardew-vision-training`](https://github.com/thesteve0/stardew-vision-training) repository.
 
 **Key files**:
 Main model architecture
@@ -59,14 +61,11 @@ Main model architecture
 **Common commands**:
 
 ```bash
-# Run extraction tool on a screenshot
-python data/dev/test_extraction_tool.py
-
-# Test OCR output
-python data/dev/test_ocr_on_panel.py
-
 # Start vLLM server (on host machine, outside devcontainer)
 bash deploy/start_vllm_host.sh
+
+# Test extraction tools and data collection workflows:
+# See stardew-vision-training repo
 ```
 
 **Testing**:
@@ -93,7 +92,7 @@ See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 
 - **Pipeline**: Full agentic loop. FastAPI is the agent runtime (manages the loop, executes tools, holds base64 image, logs errors). Qwen2.5-VL-7B is the reasoner (classifies screen, calls extraction tool, checks for failures/typos, applies corrections, assembles narration, calls TTS). The loop runs until Qwen signals done — at most 4 turns for the happy path. See [ADR-009](docs/adr/009-agent-tool-calling-architecture.md).
 - **Agent loop tools**: `crop_pierres_detail_panel(image_b64, debug=False)` → OCR JSON; `crop_pierres_detail_panel(image_b64, debug=True)` → OCR JSON + `ocr_raw`; `text_to_speech(text)` → WAV bytes.
-- **Error handling**: Qwen silently corrects recoverable typos. For unresolvable failures Qwen sets `has_errors=True`; FastAPI saves the screenshot to `datasets/errors/` and logs the failure. Narration always includes whatever partial data was extracted.
+- **Error handling**: Qwen silently corrects recoverable typos. For unresolvable failures Qwen sets `has_errors=True`; coordinator service saves the screenshot to mounted PVC and logs the failure. Narration always includes whatever partial data was extracted.
 - **Extraction layer**: OpenCV template matching for UI region location; PaddleOCR (PP-OCRv5) for text extraction; both CPU-only. Chosen over EasyOCR for faster CPU throughput, SOTA accuracy, and correct capitalization preservation. See [ADR-010](docs/adr/010-screen-region-extraction.md) and [docs/ocr-choice.md](docs/ocr-choice.md).
 - **MVP screen type**: Pierre's General Store detail panel — name, description, price per unit, quantity selected, total cost.
 - **Fine-tuning**: Orchestrator VLM fine-tuned on `(screenshot, tool_call_response)` pairs. LoRA via PEFT for Qwen2.5-VL-7B; TRL SFTTrainer for SmolVLM2-2.2B. Both in FP16. See [ADR-001](docs/adr/001-vlm-selection.md).
@@ -128,25 +127,22 @@ See [`docs/adr/`](docs/adr/) for full ADRs. Quick reference:
 - SmolVLM2 prefers BF16 but ROCm 7.2 only validates FP16 — test FP16 first; if unstable, document BF16 result in ADR-001 update
 - SmolVLM2's 81-token image compression may miss fine-grained pixel-art detail — this is the hypothesis to test
 - vLLM port 8001 and webapp port 8000 need to be added to `devcontainer.json` `forwardPorts`
-- `datasets/` and `models/` are host volumes — not committed to git; add to `.gitignore`
+- `models/` is a host volume — not committed to git; already in `.gitignore`
 
 ## External Dependencies
 
-- **Sprite sheet**: Stardew Valley `springobjects.png` from fan wiki (CC-BY-NC-SA); downloaded locally to `datasets/assets/`
-- **Item manifest**: Community-maintained JSON mapping item IDs to names/categories
-- **Base models**: Downloaded from HuggingFace Hub to `models/base/` (via `HF_HOME` env var in devcontainer)
-- **HuggingFace Hub**: Dataset and model artifacts pushed to `{username}/stardew-loot-vision-dataset` and `{username}/stardew-vision-vlm`
-- **No external APIs** at MVP (everything runs locally)
+- **Base models**: Downloaded from HuggingFace Hub (cached on host or in OpenShift PVC)
+- **HuggingFace Hub**: Fine-tuned LoRA adapters uploaded from training repo, consumed by vLLM serving
+- **No external APIs** at runtime (everything runs locally or on OpenShift AI)
 
 ## Testing Strategy
 
-- `pytest tests/` — unit tests for extraction tools, VLM wrapper, TTS, webapp
+- `pytest tests/` — unit tests for microservices (OCR tool, TTS tool, coordinator)
   - **Status**: Pierre's shop extraction tool has 8/8 tests passing (2026-03-20)
   - Fixture: `tests/fixtures/pierre_shop_001.png` (1600×1200 screenshot)
   - Coverage: template matching, OCR, field parsing, error handling
 - End-to-end: upload test screenshot → verify audio response via webapp
-- Evaluation metrics logged to MLFlow are the primary quality signal (not just pytest)
-- Test set = real screenshots only (not used in training)
+- **Evaluation metrics**: See stardew-vision-training repo for model quality evaluation
 ---
 
 **Note**: This is a ROCm devcontainer project. For ROCm-specific troubleshooting (GPU access, dependency conflicts, Python version issues), see `template_docs/CLAUDE.md`.
