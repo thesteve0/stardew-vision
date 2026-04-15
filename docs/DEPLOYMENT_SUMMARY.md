@@ -16,7 +16,7 @@ All services running in `stardew-vision` namespace on OpenShift AI:
 |---------|----------|---------------|--------|---------|
 | **vLLM Predictor** | 1/1 | Qwen2.5-VL-7B-Instruct | ✅ Running | VLM inference with tool calling |
 | **Coordinator** | 3/3 | ghcr.io/thesteve0/stardew-coordinator:v0.3.0 | ✅ Running | Agent loop runtime |
-| **OCR Tool** | 2/2 | ghcr.io/thesteve0/stardew-ocr-tool:v0.4.0 | ✅ Running | PaddleOCR + OpenCV extraction |
+| **OCR Tool** | 2/2 | ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.4.0 | ✅ Running | PaddleOCR + OpenCV extraction |
 | **TTS Tool** | 2/2 | ghcr.io/thesteve0/stardew-tts-tool:v0.4.0 | ✅ Running | Kokoro TTS synthesis |
 
 ### Internal Networking
@@ -37,7 +37,7 @@ All services running in `stardew-vision` namespace on OpenShift AI:
 │  - Executes tool calls                                  │
 │  - Holds base64 image in memory                         │
 │         ↓                    ↓                           │
-│  http://ocr-tool:8002   http://tts-tool:8003           │
+│  http://pierres-buying-tool:8002   http://tts-tool:8003           │
 │  (PaddleOCR)            (Kokoro TTS)                    │
 │                                                          │
 │  https://stardew-vision-....apps.....opentlc.com        │
@@ -278,7 +278,7 @@ envFrom:
 
 # ConfigMap content:
 data:
-  OCR_TOOL_URL: "http://ocr-tool:8002"
+  PIERRES_BUYING_TOOL_URL: "http://pierres-buying-tool:8002"
   TTS_TOOL_URL: "http://tts-tool:8003"
   VLLM_BASE_URL: "http://stardew-vlm-predictor:8080/v1"
   VLLM_MODEL: "stardew-vlm"
@@ -300,9 +300,9 @@ volumes:
 
 ### OCR Tool
 
-**File:** `configs/serving/openshift/10-deployment-ocr-tool.yaml`
+**File:** `configs/serving/openshift/10-deployment-pierres-buying-tool.yaml`
 
-**Image:** `ghcr.io/thesteve0/stardew-ocr-tool:v0.4.0`
+**Image:** `ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.4.0`
 
 **Key Changes:**
 - ✅ System libraries for OpenCV (libgl1, libglib2.0-0, libgomp1)
@@ -382,8 +382,8 @@ NAME                                     READY   STATUS    RESTARTS   AGE
 coordinator-78cfc7f7f8-6bnw8             1/1     Running   0          66m
 coordinator-78cfc7f7f8-qxfnf             1/1     Running   0          66m
 coordinator-78cfc7f7f8-t4j75             1/1     Running   0          66m
-ocr-tool-85c555cbcb-k79fg                1/1     Running   0          45m
-ocr-tool-85c555cbcb-zkdfg                1/1     Running   0          44m
+pierres-buying-tool-85c555cbcb-k79fg                1/1     Running   0          45m
+pierres-buying-tool-85c555cbcb-zkdfg                1/1     Running   0          44m
 stardew-vlm-predictor-8456665bd9-nsczg   1/1     Running   0          10m
 tts-tool-5496969749-phbbh                1/1     Running   0          21m
 tts-tool-5496969749-pnz6g                1/1     Running   0          20m
@@ -399,7 +399,7 @@ oc get svc -n stardew-vision
 ```
 NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
 coordinator             ClusterIP   172.30.248.47   <none>        8000/TCP   70m
-ocr-tool                ClusterIP   172.30.56.158   <none>        8002/TCP   71m
+pierres-buying-tool                ClusterIP   172.30.56.158   <none>        8002/TCP   71m
 stardew-vlm-predictor   ClusterIP   None            <none>        80/TCP     161m
 tts-tool                ClusterIP   172.30.92.27    <none>        8003/TCP   71m
 ```

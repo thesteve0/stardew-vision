@@ -47,7 +47,7 @@
     "HIP_VISIBLE_DEVICES": "0",
     "ROCM_HOME": "/opt/rocm",
     "ROCBLAS_USE_HIPBLASLT": "1",
-    "PYTHONPATH": "/workspaces/stardew-vision/services/coordinator:/workspaces/stardew-vision/services/ocr-tool:/workspaces/stardew-vision/services/tts-tool",
+    "PYTHONPATH": "/workspaces/stardew-vision/services/coordinator:/workspaces/stardew-vision/services/pierres_buying_tool:/workspaces/stardew-vision/services/tts-tool",
     "HF_HOME": "/workspaces/stardew-vision/.cache/huggingface",
     "TORCH_HOME": "/workspaces/stardew-vision/.cache/torch",
     "TRANSFORMERS_CACHE": "/workspaces/stardew-vision/.cache/huggingface/transformers",

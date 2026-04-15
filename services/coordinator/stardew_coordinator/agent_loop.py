@@ -9,7 +9,7 @@ screen, calls extraction tools if recognized, silently corrects OCR typos,
 and returns structured JSON {"narration": "...", "has_errors": bool}.
 
 Tool dispatch is HTTP:
-  OCR tool:  POST {OCR_TOOL_URL}/extract/pierres-detail-panel
+  Pierre's buying tool:  POST {PIERRES_BUYING_TOOL_URL}/extract/pierres-detail-panel
   TTS tool:  POST {TTS_TOOL_URL}/synthesize  → called by FastAPI, not Qwen
 
 See ADR-011 for the full design.
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_NAME = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8001/v1")
-OCR_TOOL_URL = os.getenv("OCR_TOOL_URL", "http://localhost:8002")
+PIERRES_BUYING_TOOL_URL = os.getenv("PIERRES_BUYING_TOOL_URL", "http://localhost:8002")
 TTS_TOOL_URL = os.getenv("TTS_TOOL_URL", "http://localhost:8003")
 # Error screenshots directory (mounted PVC in container, local path in dev)
 ERRORS_DIR = Path(os.getenv("ERRORS_DIR", "/app/datasets/errors"))
@@ -127,7 +127,7 @@ async def _dispatch_tool(
     if name == "crop_pierres_detail_panel":
         args["image_b64"] = image_b64  # inject — Qwen never supplies this
         resp = await http.post(
-            f"{OCR_TOOL_URL}/extract/pierres-detail-panel",
+            f"{PIERRES_BUYING_TOOL_URL}/extract/pierres-detail-panel",
             json=args,
             timeout=120.0,  # First request loads models into memory, can take 60+ seconds
         )

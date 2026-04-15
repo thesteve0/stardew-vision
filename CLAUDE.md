@@ -37,8 +37,8 @@ This file provides context to Claude Code when working on this project.
 services/
 ├── coordinator/     # Agent loop runtime (FastAPI)
 │   └── stardew_coordinator/
-├── ocr-tool/        # Pierre's shop OCR extraction (self-contained microservice)
-│   ├── stardew_ocr/
+├── pierres-buying-tool/        # Pierre's shop OCR extraction (self-contained microservice)
+│   ├── stardew_pierres_buying/
 │   └── assets/templates/  # OpenCV templates (baked into container)
 └── tts-tool/        # Text-to-speech synthesis
     └── stardew_tts/
@@ -236,7 +236,7 @@ Coordinator Service (port 8000, 1 replica)
 - vLLM args: `--max-model-len=4096 --limit-mm-per-prompt={"image":1} --enable-auto-tool-choice --tool-call-parser=hermes`
 
 **2. OCR Tool Service**
-- Image: `ghcr.io/thesteve0/stardew-ocr-tool:v0.12.0`
+- Image: `ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.12.0`
 - Resources: 1000m CPU, 4Gi memory request, 2500m CPU, 8Gi memory limit
 - PVC: `paddlex-cache` (2Gi) for PaddleOCR models
 - Init container: Pre-downloads models on pod startup
@@ -252,7 +252,7 @@ Coordinator Service (port 8000, 1 replica)
 **4. Coordinator Service**
 - Image: `ghcr.io/thesteve0/stardew-coordinator:v0.6.0`
 - Resources: 500m CPU, 512Mi memory request, 1000m CPU, 1Gi memory limit
-- ConfigMap: `service-endpoints` (OCR_TOOL_URL, TTS_TOOL_URL, VLLM_BASE_URL, VLLM_MODEL)
+- ConfigMap: `service-endpoints` (PIERRES_BUYING_TOOL_URL, TTS_TOOL_URL, VLLM_BASE_URL, VLLM_MODEL)
 - PVC: `error-screenshots` (5Gi) for failed extractions
 - Route timeout: 3 minutes (annotation: `haproxy.router.openshift.io/timeout: 3m`)
 
@@ -290,7 +290,7 @@ kubectl apply -f configs/serving/openshift/01-configmap-endpoints.yaml
 kubectl apply -f configs/serving/openshift/vllm/04-configmap-chat-template.yaml
 kubectl apply -f configs/serving/openshift/vllm/02-servingruntime-with-template.yaml
 kubectl apply -f configs/serving/openshift/vllm/03-inferenceservice.yaml
-kubectl apply -f configs/serving/openshift/10-deployment-ocr-tool.yaml
+kubectl apply -f configs/serving/openshift/10-deployment-pierres-buying-tool.yaml
 kubectl apply -f configs/serving/openshift/20-deployment-tts-tool.yaml
 kubectl apply -f configs/serving/openshift/30-deployment-coordinator.yaml
 ```
@@ -309,7 +309,7 @@ kubectl logs -n stardew-vision deployment/coordinator -f | grep "⏱️"
 
 **Check OCR tool logs:**
 ```bash
-kubectl logs -n stardew-vision deployment/ocr-tool -f
+kubectl logs -n stardew-vision deployment/pierres-buying-tool -f
 ```
 
 **Test OCR service directly:**

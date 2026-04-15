@@ -1,29 +1,29 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ocr-tool
+  name: pierres-buying-tool
   namespace: stardew-vision
   labels:
     app: stardew-vision
-    component: ocr-tool
+    component: pierres-buying-tool
 spec:
   replicas: 1
   selector:
     matchLabels:
-      component: ocr-tool
+      component: pierres-buying-tool
   template:
     metadata:
       labels:
         app: stardew-vision
-        component: ocr-tool
+        component: pierres-buying-tool
     spec:
       initContainers:
         - name: download-paddlex-models
-          image: ghcr.io/thesteve0/stardew-ocr-tool:v0.12.0
+          image: ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.12.0
           command: ["/bin/sh", "-c"]
           args:
             - |
-              uv run python -c "from stardew_ocr.crop_pierres_detail_panel import _load_ocr; _load_ocr()" || true
+              uv run python -c "from stardew_pierres_buying.crop_pierres_detail_panel import _load_ocr; _load_ocr()" || true
           env:
             - name: HF_HOME
               value: /cache/huggingface
@@ -38,7 +38,7 @@ spec:
               mountPath: /cache
       containers:
         - name: ocr
-          image: ghcr.io/thesteve0/stardew-ocr-tool:v0.11.0
+          image: ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.11.0
           ports:
             - containerPort: 8002
               protocol: TCP
@@ -81,11 +81,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ocr-tool
+  name: pierres-buying-tool
   namespace: stardew-vision
 spec:
   selector:
-    component: ocr-tool
+    component: pierres-buying-tool
   ports:
     - port: 8002
       targetPort: 8002

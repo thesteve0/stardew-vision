@@ -31,10 +31,10 @@ docker login ghcr.io
 
 # Push images
 docker push ghcr.io/thesteve0/stardew-coordinator:v0.1.0
-docker push ghcr.io/thesteve0/stardew-ocr-tool:v0.1.0
+docker push ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.1.0
 docker push ghcr.io/thesteve0/stardew-tts-tool:v0.1.0
 docker push ghcr.io/thesteve0/stardew-coordinator:latest
-docker push ghcr.io/thesteve0/stardew-ocr-tool:latest
+docker push ghcr.io/thesteve0/stardew-pierres-buying-tool:latest
 docker push ghcr.io/thesteve0/stardew-tts-tool:latest
 ```
 
@@ -118,12 +118,12 @@ oc logs -n stardew-vision -l serving.kserve.io/inferenceservice=vllm-qwen -c kse
 
 ```bash
 # Deploy all services
-oc apply -f 10-deployment-ocr-tool.yaml
+oc apply -f 10-deployment-pierres-buying-tool.yaml
 oc apply -f 20-deployment-tts-tool.yaml
 oc apply -f 30-deployment-coordinator.yaml
 
 # Wait for rollout
-oc rollout status deployment/ocr-tool -n stardew-vision
+oc rollout status deployment/pierres-buying-tool -n stardew-vision
 oc rollout status deployment/tts-tool -n stardew-vision
 oc rollout status deployment/coordinator -n stardew-vision
 
@@ -142,8 +142,8 @@ oc get pods -n stardew-vision
 # coordinator-xxx     1/1  Running
 # coordinator-xxx     1/1  Running
 # coordinator-xxx     1/1  Running
-# ocr-tool-xxx        1/1  Running
-# ocr-tool-xxx        1/1  Running
+# pierres-buying-tool-xxx        1/1  Running
+# pierres-buying-tool-xxx        1/1  Running
 # tts-tool-xxx        1/1  Running
 # tts-tool-xxx        1/1  Running
 # vllm-qwen-xxx       2/2  Running
@@ -166,7 +166,7 @@ open https://${EXTERNAL_URL}
 | `03-pvc-hf-cache.yaml` | TTS model cache (2Gi) |
 | `04-pvc-errors.yaml` | Error screenshot storage (5Gi) |
 | `05-objectbucketclaim.yaml` | ODF bucket for model weights |
-| `10-deployment-ocr-tool.yaml` | OCR service deployment + service |
+| `10-deployment-pierres-buying-tool.yaml` | OCR service deployment + service |
 | `20-deployment-tts-tool.yaml` | TTS service deployment + service |
 | `30-deployment-coordinator.yaml` | Main app deployment + service + route |
 | `40-serving-runtime.yaml` | vLLM runtime with custom template |
@@ -182,7 +182,7 @@ oc get nodes -l nvidia.com/gpu.present=true
 
 ### OCR Templates Missing
 ```bash
-oc exec -n stardew-vision deployment/ocr-tool -- ls -la /app/datasets/assets/templates
+oc exec -n stardew-vision deployment/pierres-buying-tool -- ls -la /app/datasets/assets/templates
 ```
 
 ### Coordinator Can't Reach vLLM
@@ -198,7 +198,7 @@ oc logs -n stardew-vision -l app=stardew-vision --all-containers -f --tail=100
 
 # Specific service
 oc logs -n stardew-vision -l component=coordinator -f
-oc logs -n stardew-vision -l component=ocr-tool -f
+oc logs -n stardew-vision -l component=pierres-buying-tool -f
 oc logs -n stardew-vision -l component=tts-tool -f
 oc logs -n stardew-vision -l serving.kserve.io/inferenceservice=vllm-qwen -c kserve-container -f
 ```
@@ -223,7 +223,7 @@ oc delete namespace stardew-vision
 # Or selectively
 oc delete -f 30-deployment-coordinator.yaml
 oc delete -f 20-deployment-tts-tool.yaml
-oc delete -f 10-deployment-ocr-tool.yaml
+oc delete -f 10-deployment-pierres-buying-tool.yaml
 oc delete inferenceservice vllm-qwen -n stardew-vision
 oc delete servingruntime vllm-runtime -n stardew-vision
 ```

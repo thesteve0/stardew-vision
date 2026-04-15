@@ -18,7 +18,7 @@ This document summarizes the deployment artifacts created for migrating Stardew 
 | `03-pvc-hf-cache.yaml` | TTS model cache (2Gi) | 185 bytes |
 | `04-pvc-errors.yaml` | Error screenshot storage (5Gi) | 194 bytes |
 | `05-objectbucketclaim.yaml` | ODF bucket for model weights | 220 bytes |
-| `10-deployment-ocr-tool.yaml` | OCR service deployment + service | 1.4 KB |
+| `10-deployment-pierres-buying-tool.yaml` | OCR service deployment + service | 1.4 KB |
 | `20-deployment-tts-tool.yaml` | TTS service deployment + service | 2.0 KB |
 | `30-deployment-coordinator.yaml` | Main app deployment + service + route | 2.1 KB |
 | `40-serving-runtime.yaml` | vLLM runtime with NVIDIA GPU support | 1.2 KB |
@@ -72,10 +72,10 @@ This document summarizes the deployment artifacts created for migrating Stardew 
 ./deploy/build-images.sh v0.1.0
 docker login ghcr.io
 docker push ghcr.io/thesteve0/stardew-coordinator:v0.1.0
-docker push ghcr.io/thesteve0/stardew-ocr-tool:v0.1.0
+docker push ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.1.0
 docker push ghcr.io/thesteve0/stardew-tts-tool:v0.1.0
 docker push ghcr.io/thesteve0/stardew-coordinator:latest
-docker push ghcr.io/thesteve0/stardew-ocr-tool:latest
+docker push ghcr.io/thesteve0/stardew-pierres-buying-tool:latest
 docker push ghcr.io/thesteve0/stardew-tts-tool:latest
 ```
 
@@ -159,7 +159,7 @@ oc get nodes -l nvidia.com/gpu.present=true
 
 **OCR templates missing:**
 ```bash
-oc exec -n stardew-vision deployment/ocr-tool -- ls -la /app/datasets/assets/templates
+oc exec -n stardew-vision deployment/pierres-buying-tool -- ls -la /app/datasets/assets/templates
 ```
 
 **Coordinator can't reach vLLM:**
@@ -191,7 +191,7 @@ oc delete namespace stardew-vision
 # Or selectively
 oc delete -f configs/serving/openshift/30-deployment-coordinator.yaml
 oc delete -f configs/serving/openshift/20-deployment-tts-tool.yaml
-oc delete -f configs/serving/openshift/10-deployment-ocr-tool.yaml
+oc delete -f configs/serving/openshift/10-deployment-pierres-buying-tool.yaml
 oc delete inferenceservice vllm-qwen -n stardew-vision
 ```
 

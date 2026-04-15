@@ -32,7 +32,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 # Templates are baked into container image at /app/assets/templates
-# Self-contained within the ocr-tool service
+# Self-contained within the pierres_buying_tool service
 import os
 _TEMPLATES_DIR = Path(os.getenv("TEMPLATES_DIR", "/app/assets/templates"))
 _LAYOUT_FILE = _TEMPLATES_DIR / "pierre_panel_layout.json"

@@ -1,9 +1,9 @@
 services:
 
-  ocr-tool:
+  pierres-buying-tool:
     build:
       context: ..
-      dockerfile: services/ocr-tool/Dockerfile
+      dockerfile: services/pierres-buying-tool/Dockerfile
     ports:
       - "8002:8002"
     restart: unless-stopped
@@ -27,13 +27,13 @@ services:
     ports:
       - "8000:8000"
     environment:
-      OCR_TOOL_URL: http://ocr-tool:8002
+      PIERRES_BUYING_TOOL_URL: http://pierres-buying-tool:8002
       TTS_TOOL_URL: http://tts-tool:8003
       # vLLM runs on the host machine — host.docker.internal resolves to host
       VLLM_BASE_URL: http://host.docker.internal:8001/v1
       VLLM_MODEL: Qwen/Qwen2.5-VL-7B-Instruct
     depends_on:
-      - ocr-tool
+      - pierres-buying-tool
       - tts-tool
     restart: unless-stopped
 

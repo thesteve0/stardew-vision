@@ -6,8 +6,8 @@ metadata:
   labels:
     app: stardew-vision
 data:
-  # OCR Tool endpoint
-  OCR_TOOL_URL: "http://ocr-tool:8002"
+  # Pierre's Buying Tool endpoint (Pierre's shop detail panel extraction)
+  PIERRES_BUYING_TOOL_URL: "http://pierres-buying-tool:8002"
 
   # TTS Tool endpoint
   TTS_TOOL_URL: "http://tts-tool:8003"

@@ -12,15 +12,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv for fast dependency installation
 RUN pip install uv
 
-# Copy and install only OCR tool dependencies
-COPY services/ocr-tool/pyproject.toml .
+# Copy and install dependencies
+COPY services/pierres_buying_tool/pyproject.toml .
 RUN uv sync --no-dev
 
-# Copy the OCR tool package
-COPY services/ocr-tool/stardew_ocr/ ./stardew_ocr/
+# Copy the package
+COPY services/pierres_buying_tool/stardew_pierres_buying/ ./stardew_pierres_buying/
 
 # Copy OpenCV template images (self-contained service)
-COPY services/ocr-tool/assets/ ./assets/
+COPY services/pierres_buying_tool/assets/ ./assets/
 
 ENV PYTHONPATH=/app
 ENV UV_CACHE_DIR=/tmp/.uv
@@ -34,4 +34,4 @@ ENV PADDLE_OCR_BASE_DIR=/tmp/.paddleocr
 ENV HF_HOME=/tmp/.huggingface
 
 EXPOSE 8002
-CMD ["uv", "run", "python", "-m", "uvicorn", "stardew_ocr.app:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["uv", "run", "python", "-m", "uvicorn", "stardew_pierres_buying.app:app", "--host", "0.0.0.0", "--port", "8002"]

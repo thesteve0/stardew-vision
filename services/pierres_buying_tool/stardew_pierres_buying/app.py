@@ -33,7 +33,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from stardew_ocr.crop_pierres_detail_panel import (
+from stardew_pierres_buying.crop_pierres_detail_panel import (
     PanelNotFoundError,
     crop_pierres_detail_panel,
 )

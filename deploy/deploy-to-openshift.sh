@@ -115,13 +115,13 @@ echo ""
 echo -e "${YELLOW}Phase 3: Deploying Microservices${NC}"
 echo ""
 
-$KUBECTL apply -f 10-deployment-ocr-tool.yaml
+$KUBECTL apply -f 10-deployment-pierres-buying-tool.yaml
 $KUBECTL apply -f 20-deployment-tts-tool.yaml
 $KUBECTL apply -f 30-deployment-coordinator.yaml
 
 echo ""
 echo -e "${YELLOW}Waiting for deployments to be ready...${NC}"
-$KUBECTL rollout status deployment/ocr-tool -n stardew-vision
+$KUBECTL rollout status deployment/pierres-buying-tool -n stardew-vision
 $KUBECTL rollout status deployment/tts-tool -n stardew-vision
 $KUBECTL rollout status deployment/coordinator -n stardew-vision
 

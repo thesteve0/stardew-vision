@@ -8,7 +8,7 @@ echo ""
 
 PACKAGES=(
     "stardew-coordinator"
-    "stardew-ocr-tool"
+    "stardew-pierres-buying-tool"
     "stardew-tts-tool"
 )
 

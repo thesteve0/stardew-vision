@@ -24,8 +24,8 @@ echo "[1/3] Building coordinator..."
 docker build -f services/coordinator/Dockerfile -t ${REGISTRY}/stardew-coordinator:${VERSION} .
 
 echo ""
-echo "[2/3] Building ocr-tool..."
-docker build -f services/ocr-tool/Dockerfile -t ${REGISTRY}/stardew-ocr-tool:${VERSION} .
+echo "[2/3] Building pierres-buying-tool..."
+docker build -f services/pierres_buying_tool/Dockerfile -t ${REGISTRY}/stardew-pierres-buying-tool:${VERSION} .
 
 echo ""
 echo "[3/3] Building tts-tool..."
@@ -34,7 +34,7 @@ docker build -f services/tts-tool/Dockerfile -t ${REGISTRY}/stardew-tts-tool:${V
 echo ""
 echo "Tagging as latest..."
 docker tag ${REGISTRY}/stardew-coordinator:${VERSION} ${REGISTRY}/stardew-coordinator:latest
-docker tag ${REGISTRY}/stardew-ocr-tool:${VERSION} ${REGISTRY}/stardew-ocr-tool:latest
+docker tag ${REGISTRY}/stardew-pierres-buying-tool:${VERSION} ${REGISTRY}/stardew-pierres-buying-tool:latest
 docker tag ${REGISTRY}/stardew-tts-tool:${VERSION} ${REGISTRY}/stardew-tts-tool:latest
 
 echo ""
@@ -51,14 +51,14 @@ echo "   docker login ghcr.io"
 echo ""
 echo "2. Push all images:"
 echo "   docker push ${REGISTRY}/stardew-coordinator:${VERSION}"
-echo "   docker push ${REGISTRY}/stardew-ocr-tool:${VERSION}"
+echo "   docker push ${REGISTRY}/stardew-pierres-buying-tool:${VERSION}"
 echo "   docker push ${REGISTRY}/stardew-tts-tool:${VERSION}"
 echo "   docker push ${REGISTRY}/stardew-coordinator:latest"
-echo "   docker push ${REGISTRY}/stardew-ocr-tool:latest"
+echo "   docker push ${REGISTRY}/stardew-pierres-buying-tool:latest"
 echo "   docker push ${REGISTRY}/stardew-tts-tool:latest"
 echo ""
 echo "3. Return to devcontainer and redeploy:"
 echo "   oc rollout restart deployment/coordinator -n stardew-vision"
-echo "   oc rollout restart deployment/ocr-tool -n stardew-vision"
+echo "   oc rollout restart deployment/pierres-buying-tool -n stardew-vision"
 echo "   oc rollout restart deployment/tts-tool -n stardew-vision"
 echo ""

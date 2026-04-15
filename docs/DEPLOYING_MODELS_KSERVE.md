@@ -87,7 +87,7 @@ All services in this project run in the **same namespace** (`stardew-vision`) wi
 │  └───────┬──────────────────┬─────────────────┘         │
 │          │                  │                            │
 │  ┌───────▼─────┐    ┌──────▼──────┐                    │
-│  │ ocr-tool    │    │  tts-tool   │                    │
+│  │ pierres-buying-tool    │    │  tts-tool   │                    │
 │  │ :8000       │    │  :8000      │                    │
 │  └─────────────┘    └─────────────┘                    │
 │          │                  │                            │
@@ -571,7 +571,7 @@ Once vLLM is verified, deploy the rest of the stack:
 
 ```bash
 # OCR extraction tool (internal only)
-oc apply -f configs/serving/openshift/10-deployment-ocr-tool.yaml
+oc apply -f configs/serving/openshift/10-deployment-pierres-buying-tool.yaml
 
 # TTS synthesis tool (internal only)
 oc apply -f configs/serving/openshift/20-deployment-tts-tool.yaml

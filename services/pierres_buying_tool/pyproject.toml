@@ -1,5 +1,5 @@
 [project]
-name = "stardew-ocr-tool"
+name = "stardew-pierres-buying-tool"
 version = "0.1.0"
 description = "OCR extraction microservice for Stardew Vision"
 requires-python = ">=3.12"

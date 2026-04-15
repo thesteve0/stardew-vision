@@ -187,11 +187,11 @@ stardew-vision/
 │   │   ├── Dockerfile
 │   │   ├── pyproject.toml
 │   │   └── stardew_coordinator/
-│   ├── ocr-tool/              # Pierre's shop OCR extraction
+│   ├── pierres_buying_tool/   # Pierre's shop detail panel extraction
 │   │   ├── Dockerfile
 │   │   ├── pyproject.toml
 │   │   ├── assets/templates/  # OpenCV templates (self-contained)
-│   │   └── stardew_ocr/
+│   │   └── stardew_pierres_buying/
 │   └── tts-tool/              # Text-to-speech synthesis
 │       ├── Dockerfile
 │       ├── pyproject.toml

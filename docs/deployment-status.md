@@ -50,7 +50,7 @@ Full agent loop deployed and operational on OpenShift AI. Users can upload Pierr
 
 **Health endpoints:**
 - vLLM: `http://stardew-vlm-predictor:8080/health`
-- OCR: `http://ocr-tool:8002/health`
+- OCR: `http://pierres-buying-tool:8002/health`
 - TTS: `http://tts-tool:8003/health`
 - Coordinator: `http://coordinator:8000/health`
 
@@ -96,8 +96,8 @@ kubectl logs -n stardew-vision deployment/coordinator -f | grep "⏱️"
 
 **OCR Tool:**
 ```bash
-kubectl rollout restart deployment/ocr-tool -n stardew-vision
-kubectl rollout status deployment/ocr-tool -n stardew-vision
+kubectl rollout restart deployment/pierres-buying-tool -n stardew-vision
+kubectl rollout status deployment/pierres-buying-tool -n stardew-vision
 ```
 
 **Coordinator:**
@@ -118,16 +118,16 @@ kubectl get pods -n stardew-vision -l serving.kserve.io/inferenceservice=stardew
 **OCR Tool:**
 ```bash
 # Build and push new image
-docker build -t ghcr.io/thesteve0/stardew-ocr-tool:v0.XX.0 -f services/ocr-tool/Dockerfile .
-docker push ghcr.io/thesteve0/stardew-ocr-tool:v0.XX.0
+docker build -t ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.XX.0 -f services/pierres-buying-tool/Dockerfile .
+docker push ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.XX.0
 
 # Update deployment
-kubectl set image deployment/ocr-tool -n stardew-vision \
-  ocr=ghcr.io/thesteve0/stardew-ocr-tool:v0.XX.0 \
-  download-paddlex-models=ghcr.io/thesteve0/stardew-ocr-tool:v0.XX.0
+kubectl set image deployment/pierres-buying-tool -n stardew-vision \
+  ocr=ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.XX.0 \
+  download-paddlex-models=ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.XX.0
 
 # Monitor rollout
-kubectl rollout status deployment/ocr-tool -n stardew-vision
+kubectl rollout status deployment/pierres-buying-tool -n stardew-vision
 ```
 
 **Coordinator:**
@@ -161,7 +161,7 @@ kubectl cp stardew-vision/<coordinator-pod-name>:/app/datasets/errors/<error-fil
 kubectl logs -n stardew-vision deployment/coordinator -f
 
 # OCR tool (model loading, extraction)
-kubectl logs -n stardew-vision deployment/ocr-tool -f
+kubectl logs -n stardew-vision deployment/pierres-buying-tool -f
 
 # TTS tool (synthesis)
 kubectl logs -n stardew-vision deployment/tts-tool -f

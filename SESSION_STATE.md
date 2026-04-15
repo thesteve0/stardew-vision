@@ -188,7 +188,7 @@ oc get hardwareprofiles -n redhat-ods-applications
 All services in `stardew-vision` namespace with internal access only:
 - `stardew-vlm:8080` - vLLM inference (no external route, no auth)
 - `coordinator:8000` - Agent loop (internal only)
-- `ocr-tool:8000` - OpenCV + PaddleOCR (internal only)
+- `pierres-buying-tool:8000` - OpenCV + PaddleOCR (internal only)
 - `tts-tool:8000` - MeloTTS (internal only)
 - `webapp:8000` - FastAPI (ONLY service with external route)
 
@@ -371,7 +371,7 @@ stardew-vlm-predictor   10.128.2.21:8080   X min
 
 7. Deploy microservices in order:
    ```bash
-   oc apply -f configs/serving/openshift/10-deployment-ocr-tool.yaml
+   oc apply -f configs/serving/openshift/10-deployment-pierres-buying-tool.yaml
    oc apply -f configs/serving/openshift/20-deployment-tts-tool.yaml
    oc apply -f configs/serving/openshift/30-deployment-coordinator.yaml
    oc apply -f configs/serving/openshift/40-deployment-webapp.yaml

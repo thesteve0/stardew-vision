@@ -125,7 +125,7 @@ env:
 Deploy stack:
 
 ```bash
-oc apply -f configs/serving/openshift/10-deployment-ocr-tool.yaml
+oc apply -f configs/serving/openshift/10-deployment-pierres-buying-tool.yaml
 oc apply -f configs/serving/openshift/20-deployment-tts-tool.yaml
 oc apply -f configs/serving/openshift/30-deployment-coordinator.yaml
 oc apply -f configs/serving/openshift/40-deployment-webapp.yaml
@@ -194,7 +194,7 @@ oc logs -n stardew-vision \
 │  stardew-vlm-predictor:8080 ← coordinator:8000 ← webapp    │
 │  (vLLM inference)              (agent loop)      (FastAPI) │
 │                                     ↓                ↓      │
-│                              ocr-tool:8000   [External Route]─→ Internet
+│                              pierres-buying-tool:8002   [External Route]─→ Internet
 │                              tts-tool:8000          ↑       │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘

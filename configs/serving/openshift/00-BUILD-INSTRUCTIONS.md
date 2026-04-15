@@ -37,16 +37,16 @@ The devcontainer environment:
 5. **Push all images**
    ```bash
    docker push ghcr.io/thesteve0/stardew-coordinator:v0.1.0
-   docker push ghcr.io/thesteve0/stardew-ocr-tool:v0.1.0
+   docker push ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.1.0
    docker push ghcr.io/thesteve0/stardew-tts-tool:v0.1.0
    docker push ghcr.io/thesteve0/stardew-coordinator:latest
-   docker push ghcr.io/thesteve0/stardew-ocr-tool:latest
+   docker push ghcr.io/thesteve0/stardew-pierres-buying-tool:latest
    docker push ghcr.io/thesteve0/stardew-tts-tool:latest
    ```
 
 6. **Make packages public** (they're private by default)
    - Go to https://github.com/thesteve0?tab=packages
-   - For each package (stardew-coordinator, stardew-ocr-tool, stardew-tts-tool):
+   - For each package (stardew-coordinator, stardew-pierres-buying-tool, stardew-tts-tool):
      - Click on the package name
      - Click "Package settings" (right sidebar)
      - Scroll to "Danger Zone"
@@ -59,7 +59,7 @@ After pushing, verify the images are accessible:
 ```bash
 # Should work without authentication if packages are public
 docker pull ghcr.io/thesteve0/stardew-coordinator:v0.1.0
-docker pull ghcr.io/thesteve0/stardew-ocr-tool:v0.1.0
+docker pull ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.1.0
 docker pull ghcr.io/thesteve0/stardew-tts-tool:v0.1.0
 ```
 

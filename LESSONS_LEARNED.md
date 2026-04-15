@@ -44,8 +44,8 @@ from paddleocr import PaddleOCR
 6. **Check every service** - When debugging permission issues, audit ALL services (OCR, TTS, coordinator), not just the one currently failing. Each may have different libraries with different cache behaviors.
 
 **Files Changed:**
-- `services/ocr-tool/stardew_ocr/crop_pierres_detail_panel.py` - Added `os.environ.setdefault()` calls before imports
-- `services/ocr-tool/Dockerfile` - Added `ENV` variables (belt-and-suspenders, even though code fix is primary)
+- `services/pierres_buying_tool/stardew_pierres_buying/crop_pierres_detail_panel.py` - Added `os.environ.setdefault()` calls before imports
+- `services/pierres_buying_tool/Dockerfile` - Added `ENV` variables (belt-and-suspenders, even though code fix is primary)
 
 **Related:** See memory file `feedback_openshift_permissions.md` for detailed guidance on this pattern.
 
@@ -90,7 +90,7 @@ os.environ.setdefault('FLAGS_use_xdnn', '0')
 4. **Test with actual inference** - Health checks may pass (they don't load models), but first real request crashes. Always test end-to-end with real data.
 
 **Files Changed:**
-- `services/ocr-tool/stardew_ocr/app.py` - Added `FLAGS_use_mkldnn=0` and `FLAGS_use_xdnn=0` environment variables
+- `services/pierres_buying_tool/stardew_pierres_buying/app.py` - Added `FLAGS_use_mkldnn=0` and `FLAGS_use_xdnn=0` environment variables
 
 **Related Issues:**
 - [PaddleOCR Issue #16789: paddleocr gives 'Illegal instruction' on ARM/CPU-only docker](https://github.com/PaddlePaddle/PaddleOCR/issues/16789)
@@ -163,7 +163,7 @@ def _load_ocr():
 - Any framework with expensive model initialization
 
 **Files Changed:**
-- `services/ocr-tool/stardew_ocr/crop_pierres_detail_panel.py` - Added `_OCR_INSTANCE` global cache
-- `configs/serving/openshift/10-deployment-ocr-tool.yaml` - Increased memory limits to 4Gi request, 8Gi limit
+- `services/pierres_buying_tool/stardew_pierres_buying/crop_pierres_detail_panel.py` - Added `_OCR_INSTANCE` global cache
+- `configs/serving/openshift/10-deployment-pierres-buying-tool.yaml` - Increased memory limits to 4Gi request, 8Gi limit
 
 **Related:** See ADR-012 for full OpenShift deployment architecture including model caching strategy.

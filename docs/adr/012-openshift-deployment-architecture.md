@@ -75,7 +75,7 @@ Coordinator Service (port 8000)
 #### 2. OCR Tool Service
 
 **Deployment**: Standard Kubernetes Deployment (1 replica)
-- Image: `ghcr.io/thesteve0/stardew-ocr-tool:v0.12.0`
+- Image: `ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.12.0`
 - Resources: 1000m CPU request, 2500m limit, 4Gi memory request, 8Gi limit
 - PVC: `paddlex-cache` (2Gi) mounted at `/cache`
 - Init Container: Pre-downloads PaddleOCR models on first pod startup
@@ -112,7 +112,7 @@ FLAGS_use_xdnn: "0"
 **Deployment**: Standard Kubernetes Deployment (1 replica)
 - Image: `ghcr.io/thesteve0/stardew-coordinator:v0.6.0`
 - Resources: 500m CPU request, 1000m limit, 512Mi memory request, 1Gi limit
-- ConfigMap: `service-endpoints` (OCR_TOOL_URL, TTS_TOOL_URL, VLLM_BASE_URL, VLLM_MODEL)
+- ConfigMap: `service-endpoints` (PIERRES_BUYING_TOOL_URL, TTS_TOOL_URL, VLLM_BASE_URL, VLLM_MODEL)
 - PVC: `error-screenshots` mounted at `/app/datasets/errors`
 
 **Route Configuration**:
@@ -157,7 +157,7 @@ from paddleocr import PaddleOCR
 ### Image Registry
 
 All images pushed to GitHub Container Registry (ghcr.io):
-- `ghcr.io/thesteve0/stardew-ocr-tool:v0.12.0`
+- `ghcr.io/thesteve0/stardew-pierres-buying-tool:v0.12.0`
 - `ghcr.io/thesteve0/stardew-tts-tool:v0.4.0`
 - `ghcr.io/thesteve0/stardew-coordinator:v0.6.0`
 
@@ -181,7 +181,7 @@ kubectl apply -f configs/serving/openshift/vllm/02-servingruntime-with-template.
 kubectl apply -f configs/serving/openshift/vllm/03-inferenceservice.yaml
 
 # 5. Deploy microservices
-kubectl apply -f configs/serving/openshift/10-deployment-ocr-tool.yaml
+kubectl apply -f configs/serving/openshift/10-deployment-pierres-buying-tool.yaml
 kubectl apply -f configs/serving/openshift/20-deployment-tts-tool.yaml
 kubectl apply -f configs/serving/openshift/30-deployment-coordinator.yaml
 ```
