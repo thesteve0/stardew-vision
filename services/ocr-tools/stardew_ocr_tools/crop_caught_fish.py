@@ -14,11 +14,14 @@ Ported from stardew-vision-training/tools-code/crop_caught_fish.py.
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from stardew_ocr_tools.common import (
     crop_regions,
@@ -47,29 +50,65 @@ class FishNotFoundError(Exception):
 # ---------------------------------------------------------------------------
 
 
+def _detect_frame_boundary(fish_sprite_crop: np.ndarray, gradient_threshold: int = 15) -> np.ndarray:
+    """Trim variable speech-bubble edges outside the wooden frame.
+
+    Scans inward from each edge along the center row/column, looking for
+    the first sharp brightness gradient (the frame's outer edge).  This
+    keeps the entire frame + interior while removing the surrounding
+    speech-bubble pixels that shift with player position.
+    """
+    gray = cv2.cvtColor(fish_sprite_crop, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+
+    mid_y = h // 2
+    row_grad = np.abs(np.diff(gray[mid_y, :].astype(np.int16)))
+    left = 0
+    for i in range(len(row_grad)):
+        if row_grad[i] > gradient_threshold:
+            left = i + 1
+            break
+    right = w
+    for i in range(len(row_grad) - 1, -1, -1):
+        if row_grad[i] > gradient_threshold:
+            right = i
+            break
+
+    mid_x = w // 2
+    col_grad = np.abs(np.diff(gray[:, mid_x].astype(np.int16)))
+    top = 0
+    for i in range(len(col_grad)):
+        if col_grad[i] > gradient_threshold:
+            top = i + 1
+            break
+    bottom = h
+    for i in range(len(col_grad) - 1, -1, -1):
+        if col_grad[i] > gradient_threshold:
+            bottom = i
+            break
+
+    return fish_sprite_crop[top:bottom, left:right]
+
+
 def match_fish_sprite(
     fish_sprite_crop: np.ndarray,
-    frame_margin: float = 0.15,
     scale_range: tuple[int, int] = (6, 18),
-    match_threshold: float = 0.80,
+    match_threshold: float = 0.50,
 ) -> dict:
     """Identify the fish by template matching against the sprite library.
 
     Steps:
-        1. Strip the wooden frame border (inner crop using frame_margin)
-        2. Scale each fish sprite up at multiple integer factors
-        3. Run cv2.matchTemplate (TM_CCOEFF_NORMED) for each
-        4. Return the best match above threshold, with fish name from manifest
+        1. Detect the wooden frame boundary and trim variable outer edges
+        2. Convert to grayscale (the game applies color shifts to sprites)
+        3. Composite each sprite onto white, convert to grayscale, upscale
+        4. Run cv2.matchTemplate (TM_CCOEFF_NORMED) for each
+        5. Return the best match above threshold, with fish name from manifest
     """
-    # Strip the wooden frame
-    h, w = fish_sprite_crop.shape[:2]
-    mx = int(w * frame_margin)
-    my = int(h * frame_margin)
-    inner = fish_sprite_crop[my : h - my, mx : w - mx]
+    inner = _detect_frame_boundary(fish_sprite_crop)
 
-    # Ensure BGR (3-channel)
     if inner.shape[2] == 4:
         inner = cv2.cvtColor(inner, cv2.COLOR_BGRA2BGR)
+    inner_gray = cv2.cvtColor(inner, cv2.COLOR_BGR2GRAY)
 
     fish_sprites = load_fish_sprites()
     fish_names = load_manifest_fish()
@@ -77,10 +116,9 @@ def match_fish_sprite(
     best_score = -1.0
     best_id = None
 
-    inner_h, inner_w = inner.shape[:2]
+    inner_h, inner_w = inner_gray.shape[:2]
 
     for item_id, sprite_rgba in fish_sprites.items():
-        # Composite RGBA sprite onto white background for matching
         if sprite_rgba.shape[2] == 4:
             alpha = sprite_rgba[:, :, 3:4].astype(np.float32) / 255.0
             bgr = sprite_rgba[:, :, :3].astype(np.float32)
@@ -89,22 +127,37 @@ def match_fish_sprite(
         else:
             composited = sprite_rgba
 
+        comp_gray = cv2.cvtColor(composited, cv2.COLOR_BGR2GRAY)
+
         for scale in range(scale_range[0], scale_range[1]):
             scaled = cv2.resize(
-                composited, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST
+                comp_gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST
             )
 
             if scaled.shape[0] > inner_h or scaled.shape[1] > inner_w:
                 continue
 
-            result = cv2.matchTemplate(inner, scaled, cv2.TM_CCOEFF_NORMED)
+            result = cv2.matchTemplate(inner_gray, scaled, cv2.TM_CCOEFF_NORMED)
             _, max_val, _, _ = cv2.minMaxLoc(result)
 
             if max_val > best_score:
                 best_score = max_val
                 best_id = item_id
 
+    logger.info(
+        "Sprite matching: crop=%dx%d inner=%dx%d best_score=%.4f best_id=%s scales_tested=%d-%d",
+        fish_sprite_crop.shape[1], fish_sprite_crop.shape[0],
+        inner_w, inner_h, best_score,
+        best_id, scale_range[0], scale_range[1] - 1,
+    )
+
     if best_score < match_threshold:
+        logger.warning(
+            "Sprite match below threshold (%.4f < %.2f). Best candidate: %s (%s)",
+            best_score, match_threshold,
+            fish_names.get(best_id, "?") if best_id else "none",
+            best_id,
+        )
         return {
             "fish_name": None,
             "item_id": None,
@@ -176,11 +229,20 @@ def crop_caught_fish(image_b64: str, debug: bool = False) -> dict:
         If OCR returns no text from the notification region.
     """
     img = decode_image_b64(image_b64)
+    logger.info(
+        "Caught fish extraction: image=%dx%d",
+        img.shape[1], img.shape[0],
+    )
     layout = load_layout(_LAYOUT_FILE)
 
     cropped = crop_regions(img, layout)
     notification_crop = cropped["notification"]
     fish_sprite_crop = cropped["fish_sprite"]
+    logger.info(
+        "Cropped regions: notification=%dx%d fish_sprite=%dx%d",
+        notification_crop.shape[1], notification_crop.shape[0],
+        fish_sprite_crop.shape[1], fish_sprite_crop.shape[0],
+    )
 
     # 3x upscale needed for the large game-font numbers in this notification
     ocr_results = run_ocr(notification_crop, upscale=3.0)
