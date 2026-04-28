@@ -106,6 +106,15 @@ def match_fish_sprite(
     """
     inner = _detect_frame_boundary(fish_sprite_crop)
 
+    if inner.size == 0 or inner.shape[0] < 10 or inner.shape[1] < 10:
+        logger.warning(
+            "Frame boundary detection produced too-small crop: %dx%d from %dx%d. "
+            "Falling back to full fish_sprite_crop.",
+            inner.shape[1], inner.shape[0],
+            fish_sprite_crop.shape[1], fish_sprite_crop.shape[0],
+        )
+        inner = fish_sprite_crop
+
     if inner.shape[2] == 4:
         inner = cv2.cvtColor(inner, cv2.COLOR_BGRA2BGR)
     inner_gray = cv2.cvtColor(inner, cv2.COLOR_BGR2GRAY)
@@ -222,11 +231,8 @@ def crop_caught_fish(image_b64: str, debug: bool = False) -> dict:
     Returns
     -------
     dict with keys: screen_type, fish_name, length_inches, ocr_text.
-
-    Raises
-    ------
-    FishNotFoundError
-        If OCR returns no text from the notification region.
+    For non-fish items (Trash, Joja Cola, etc.) length_inches is None
+    and ocr_text is empty.
     """
     img = decode_image_b64(image_b64)
     logger.info(
@@ -238,24 +244,37 @@ def crop_caught_fish(image_b64: str, debug: bool = False) -> dict:
     cropped = crop_regions(img, layout)
     notification_crop = cropped["notification"]
     fish_sprite_crop = cropped["fish_sprite"]
+    text_area_crop = cropped["text_area"]
     logger.info(
-        "Cropped regions: notification=%dx%d fish_sprite=%dx%d",
+        "Cropped regions: notification=%dx%d fish_sprite=%dx%d text_area=%dx%d",
         notification_crop.shape[1], notification_crop.shape[0],
         fish_sprite_crop.shape[1], fish_sprite_crop.shape[0],
+        text_area_crop.shape[1], text_area_crop.shape[0],
     )
 
-    # 3x upscale needed for the large game-font numbers in this notification
-    ocr_results = run_ocr(notification_crop, upscale=3.0)
+    # No upscale — the caught fish text is already large pixel-art font;
+    # upscaling makes it too big for PaddleOCR's detection model.
+    ocr_results = run_ocr(text_area_crop, upscale=1.0)
 
-    if not ocr_results:
-        raise FishNotFoundError(
-            "OCR returned no text from the notification region. "
-            "The caught fish notification may not be visible in this screenshot."
+    # Non-fish items (Joja Cola, Trash, Driftwood, etc.) have no text in the
+    # notification — only the sprite in the wooden frame.  Empty OCR is normal
+    # for those items, so we proceed with sprite matching regardless.
+    if ocr_results:
+        fields = parse_caught_fish_fields(ocr_results)
+    else:
+        logger.info(
+            "No OCR text found — likely a non-fish item (no length field). "
+            "image=%dx%d notification=%dx%d",
+            img.shape[1], img.shape[0],
+            notification_crop.shape[1], notification_crop.shape[0],
         )
+        fields = {
+            "screen_type": "caught_fish",
+            "length_inches": None,
+            "ocr_text": "",
+        }
 
-    fields = parse_caught_fish_fields(ocr_results)
-
-    # Fish identification via sprite matching
+    # Fish/item identification via sprite matching
     sprite_result = match_fish_sprite(fish_sprite_crop)
     fields["fish_name"] = sprite_result["fish_name"]
 

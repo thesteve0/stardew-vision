@@ -20,7 +20,7 @@ spec:
       # Init container: pre-download PaddleOCR models so first request is fast
       initContainers:
         - name: download-models
-          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.2
+          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.4
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -43,7 +43,7 @@ spec:
               mountPath: /cache
       containers:
         - name: ocr-tools
-          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.2
+          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.4
           ports:
             - containerPort: 8004
               protocol: TCP

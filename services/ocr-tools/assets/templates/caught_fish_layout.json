@@ -16,6 +16,14 @@
       "h": 0.8931,
       "parent": "notification",
       "description": "Wooden-framed fish sprite for sprite matching (relative to notification)"
+    },
+    "text_area": {
+      "x": 0.46,
+      "y": 0.0,
+      "w": 0.54,
+      "h": 0.80,
+      "parent": "notification",
+      "description": "Text region to the right of the fish sprite (Length: NN in.)"
     }
   },
   "notes": "Initial estimates from which_fish.jpg with generous padding. Fish name cropped due to enlarged UI — not included as a region. WARNING: the speech bubble may shift with player position — verify with more screenshots."

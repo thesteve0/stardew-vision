@@ -70,6 +70,10 @@ OCR-extracted data from a game screenshot. Your job is to:
 2. Produce a natural narration that a visually impaired player can listen \
 to. Include ALL extracted fields and their full values — do not summarize \
 or truncate any information.
+3. Do NOT mention the screen type — the player already knows what they are \
+looking at.
+4. For caught fish/items: say the name first, then the length if present.
+5. Only narrate fields that are present — do not mention missing fields.
 
 Respond with ONLY the narration text — no JSON, no markup, no preamble.\
 """
@@ -250,7 +254,11 @@ async def run_agent_loop_finetuned(image_b64: str) -> dict:
                 logger.info("OCR tool %s completed in %.2fs", name, tool_elapsed)
 
                 if isinstance(result, dict) and "error" not in result:
-                    fields = {k: v for k, v in result.items() if k != "ocr_raw"}
+                    fields = {
+                        k: v for k, v in result.items()
+                        if k not in ("ocr_raw", "screen_type")
+                        and v is not None and v != ""
+                    }
                 else:
                     logger.warning("OCR tool returned error: %s", result)
                     has_errors = True

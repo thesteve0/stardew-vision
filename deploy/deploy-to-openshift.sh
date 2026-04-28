@@ -36,6 +36,7 @@ $KUBECTL apply -f 01-configmap-templates.yaml
 $KUBECTL apply -f 02-configmap-chat-template.yaml
 $KUBECTL apply -f 03-pvc-hf-cache.yaml
 $KUBECTL apply -f 04-pvc-errors.yaml
+$KUBECTL apply -f 02-pvc-paddlex-cache-ocr-tools.yaml
 $KUBECTL apply -f 05-objectbucketclaim.yaml
 
 echo ""
@@ -118,12 +119,14 @@ echo ""
 $KUBECTL apply -f 10-deployment-pierres-buying-tool.yaml
 $KUBECTL apply -f 20-deployment-tts-tool.yaml
 $KUBECTL apply -f 30-deployment-coordinator.yaml
+$KUBECTL apply -f 40-deployment-ocr-tools.yaml
 
 echo ""
 echo -e "${YELLOW}Waiting for deployments to be ready...${NC}"
 $KUBECTL rollout status deployment/pierres-buying-tool -n stardew-vision
 $KUBECTL rollout status deployment/tts-tool -n stardew-vision
 $KUBECTL rollout status deployment/coordinator -n stardew-vision
+$KUBECTL rollout status deployment/ocr-tools -n stardew-vision
 
 echo ""
 echo -e "${GREEN}✓${NC} All microservices deployed successfully!"
