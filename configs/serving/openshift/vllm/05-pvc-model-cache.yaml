@@ -1,3 +1,6 @@
+# PersistentVolumeClaim for caching the base Qwen2.5-VL-7B-Instruct model.
+# Uses EFS (ReadWriteMany) so both the base and fine-tuned predictor pods
+# can share the same model files, eliminating ~4 min download on every restart.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -8,8 +11,8 @@ metadata:
     component: vllm
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 50Gi
-  storageClassName: gp3-csi
+  storageClassName: efs-csi

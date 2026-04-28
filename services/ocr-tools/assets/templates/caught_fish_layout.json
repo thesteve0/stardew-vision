@@ -1,0 +1,22 @@
+{
+  "screen_type": "caught_fish",
+  "extracted_from_resolution": [1600, 1200],
+  "regions": {
+    "notification": {
+      "x": 0.2800,
+      "y": 0.0017,
+      "w": 0.4244,
+      "h": 0.2650,
+      "description": "White speech bubble notification area"
+    },
+    "fish_sprite": {
+      "x": 0.0530,
+      "y": 0.0252,
+      "w": 0.4065,
+      "h": 0.8931,
+      "parent": "notification",
+      "description": "Wooden-framed fish sprite for sprite matching (relative to notification)"
+    }
+  },
+  "notes": "Initial estimates from which_fish.jpg with generous padding. Fish name cropped due to enlarged UI — not included as a region. WARNING: the speech bubble may shift with player position — verify with more screenshots."
+}

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lora-adapter
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: lora-adapter
+spec:
+  accessModes:
+    - ReadWriteMany
+  # Static binding to the pre-created PV
+  storageClassName: ""
+  volumeName: lora-adapter-pv
+  resources:
+    requests:
+      storage: 20Gi

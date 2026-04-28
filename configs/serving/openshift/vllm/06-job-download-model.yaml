@@ -1,0 +1,57 @@
+# One-time Job to download Qwen2.5-VL-7B-Instruct into the shared model cache PVC.
+# Run this once after creating the PVC. Both base and fine-tuned InferenceServices
+# then use storageUri: pvc://vllm-model-cache to skip the download on every restart.
+#
+# Usage: oc apply -f 06-job-download-model.yaml
+# Monitor: oc logs -f job/download-qwen-model -n stardew-vision
+# Cleanup: oc delete job download-qwen-model -n stardew-vision
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: download-qwen-model
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: vllm
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: download
+          image: python:3.12-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              pip install huggingface_hub && \
+              python -c "
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  'Qwen/Qwen2.5-VL-7B-Instruct',
+                  local_dir='/mnt/models',
+                  local_dir_use_symlinks=False,
+              )
+              print('Download complete.')
+              "
+          env:
+            - name: HOME
+              value: /tmp
+            - name: HF_HOME
+              value: /tmp/hf_home
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: model-cache
+              mountPath: /mnt/models
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: vllm-model-cache

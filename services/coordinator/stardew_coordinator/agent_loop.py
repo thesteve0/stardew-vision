@@ -1,18 +1,20 @@
-"""Multi-turn agent loop for Stardew Vision coordinator.
+"""Two-phase agent loop for the base Qwen2.5-VL model.
 
-FastAPI is the agent runtime: it holds the base64 image for the request
-lifetime, dispatches tool calls over HTTP to the OCR microservice, manages
-the conversation state, and calls TTS directly after Qwen returns final JSON.
+Architecture:
 
-Qwen2.5-VL (served by vLLM on port 8001) is the reasoner: it classifies the
-screen, calls extraction tools if recognized, silently corrects OCR typos,
-and returns structured JSON {"narration": "...", "has_errors": bool}.
+Phase 1 — Classification + Tool Call:
+  Uses OpenAI tools= parameter (vLLM parses tool calls natively via hermes).
+  Single VLM call → model calls extraction tool → dispatch to OCR service.
+  If no tool call → return "unrecognized screen" narration.
 
-Tool dispatch is HTTP:
-  Pierre's buying tool:  POST {PIERRES_BUYING_TOOL_URL}/extract/pierres-detail-panel
-  TTS tool:  POST {TTS_TOOL_URL}/synthesize  → called by FastAPI, not Qwen
+Phase 2 — Correction / Narration:
+  Separate VLM call WITHOUT tools.
+  Pass OCR results → VLM corrects OCR errors, produces natural narration.
 
-See ADR-011 for the full design.
+Phase 3 — TTS:
+  Narration text → TTS service → WAV audio.
+
+See ADR-009 for the agent architecture design.
 """
 
 from __future__ import annotations
@@ -37,44 +39,42 @@ MODEL_NAME = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8001/v1")
 PIERRES_BUYING_TOOL_URL = os.getenv("PIERRES_BUYING_TOOL_URL", "http://localhost:8002")
 TTS_TOOL_URL = os.getenv("TTS_TOOL_URL", "http://localhost:8003")
-# Error screenshots directory (mounted PVC in container, local path in dev)
 ERRORS_DIR = Path(os.getenv("ERRORS_DIR", "/app/datasets/errors"))
-MAX_TURNS = 6
 
 # ---------------------------------------------------------------------------
-# System prompt — generalized for any Stardew Valley screen
+# System prompts
 # ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = """\
 You are an accessibility assistant for Stardew Valley players with vision impairments.
 
-You will be shown a screenshot from Stardew Valley. Your job is to help the player \
-understand what is on the screen by extracting and narrating the relevant information.
+You will be shown a screenshot from Stardew Valley. Your job is to identify \
+what screen is shown and call the appropriate extraction tool to get the details.
 
-**CRITICAL: You MUST use the extraction tools when available. Do NOT just describe what you see visually.**
-
-**If you see Pierre's General Store detail panel (item name, description, price):**
-1. IMMEDIATELY call the crop_pierres_detail_panel tool with no arguments.
-   - Do NOT pass image_b64 as an argument — the image is already available to the tool.
-   - Do NOT try to read the text yourself — always use the tool for accurate OCR.
-2. After receiving the OCR result, review the extracted fields. Silently correct obvious \
-OCR errors using your language knowledge (e.g., "Storter" → "Starter", "Pars nip" → "Parsnip").
-3. Then return a JSON response with your narration based on the corrected fields:
-   {"narration": "The item is Parsnip Seeds. Description: Plant in spring, takes 4 days. \
-Price per unit: 20 gold. You have 5 selected for a total of 100 gold.", "has_errors": false}
-
-**If the screen is unrecognized or you have no tool for it:**
-Return immediately:
-{"narration": "I have not been trained to recognize that screen. If it is important to you, \
-please let Steve know.", "has_errors": false}
-
-**On extraction failure:**
-If critical fields are missing or uncorrectable after reviewing the OCR result, return:
-{"narration": "There was an error understanding part of this image. I have logged it. \
-Here is what I was able to get: [partial info]", "has_errors": true}
-
-Your final response must ALWAYS be valid JSON with "narration" and "has_errors" keys.\
+If you recognize the screen, call the extraction tool immediately with no arguments.
+If you do not recognize the screen or have no tool for it, say so.\
 """
+
+_NARRATION_SYSTEM_PROMPT = """\
+You are an accessibility narrator for Stardew Valley. You have been given \
+OCR-extracted data from a game screenshot. Your job is to:
+
+1. Review the extracted fields and silently correct any obvious OCR errors \
+(misspellings, garbled text, wrong numbers).
+2. Produce a natural narration that a visually impaired player can listen \
+to. Include ALL extracted fields and their full values — do not summarize \
+or truncate any information.
+
+Respond with ONLY the narration text — no JSON, no markup, no preamble.\
+"""
+
+# ---------------------------------------------------------------------------
+# Tool endpoint mapping
+# ---------------------------------------------------------------------------
+
+_TOOL_ENDPOINTS = {
+    "crop_pierres_detail_panel": "/extract/pierres-detail-panel",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -116,25 +116,19 @@ async def _dispatch_tool(
     image_b64: str,
     http: httpx.AsyncClient,
 ) -> dict:
-    """
-    Call the appropriate OCR tool microservice over HTTP.
+    """Call the appropriate OCR tool microservice over HTTP."""
+    endpoint = _TOOL_ENDPOINTS.get(name)
+    if endpoint is None:
+        return {"error": f"Unknown tool: {name}"}
 
-    Returns
-    -------
-    dict
-        JSON result returned to Qwen as the tool response.
-    """
-    if name == "crop_pierres_detail_panel":
-        args["image_b64"] = image_b64  # inject — Qwen never supplies this
-        resp = await http.post(
-            f"{PIERRES_BUYING_TOOL_URL}/extract/pierres-detail-panel",
-            json=args,
-            timeout=120.0,  # First request loads models into memory, can take 60+ seconds
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-    return {"error": f"Unknown tool: {name}"}
+    args["image_b64"] = image_b64  # inject — model never supplies this
+    resp = await http.post(
+        f"{PIERRES_BUYING_TOOL_URL}{endpoint}",
+        json=args,
+        timeout=120.0,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -144,29 +138,29 @@ async def _dispatch_tool(
 
 async def run_agent_loop(image_b64: str) -> dict:
     """
-    Run the multi-turn Qwen agent loop for a single screenshot.
+    Run the two-phase agent loop for a single screenshot.
 
-    Parameters
-    ----------
-    image_b64:
-        Base64-encoded PNG or JPEG screenshot.
-
-    Returns
-    -------
-    dict with keys:
+    Returns dict with keys:
         narration   (str)        — final text for the player
         has_errors  (bool)       — True if unresolvable extraction failures
         fields      (dict|None)  — extracted fields from the last successful OCR call
         audio_bytes (bytes|None) — WAV audio from TTS
     """
     start_time = time.perf_counter()
-    logger.info("⏱️  Starting agent loop: vLLM=%s model=%s", VLLM_BASE_URL, MODEL_NAME)
-    logger.info("Available tools: %s", [t["function"]["name"] for t in TOOL_DEFINITIONS])
+    logger.info("Starting agent loop: vLLM=%s model=%s", VLLM_BASE_URL, MODEL_NAME)
 
     client = AsyncOpenAI(base_url=VLLM_BASE_URL, api_key="EMPTY")
     mime = _detect_mime(image_b64)
 
-    messages: list[dict] = [
+    fields: dict | None = None
+    narration: str = ""
+    has_errors: bool = False
+    audio_bytes: bytes | None = None
+
+    # -----------------------------------------------------------------------
+    # Phase 1 — Classification + Tool Call
+    # -----------------------------------------------------------------------
+    phase1_messages: list[dict] = [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {
             "role": "user",
@@ -177,116 +171,106 @@ async def run_agent_loop(image_b64: str) -> dict:
                 },
                 {
                     "type": "text",
-                    "text": "Please extract and narrate the details from this screenshot.",
+                    "text": "What's on this screen?",
                 },
             ],
         },
     ]
 
-    fields: dict | None = None
-    narration: str = ""
-    has_errors: bool = False
-    audio_bytes: bytes | None = None
+    vlm_start = time.perf_counter()
+    response = await client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=phase1_messages,
+        tools=TOOL_DEFINITIONS,
+        tool_choice="auto",
+    )
+    vlm_elapsed = time.perf_counter() - vlm_start
 
-    async with httpx.AsyncClient() as http:
-        for turn in range(MAX_TURNS):
-            turn_start = time.perf_counter()
-            logger.info("=== Agent turn %d/%d ===", turn + 1, MAX_TURNS)
-            logger.debug(
-                "Sending to vLLM: model=%s, tools=%s, tool_choice=auto, messages=%d",
-                MODEL_NAME,
-                [t["function"]["name"] for t in TOOL_DEFINITIONS],
-                len(messages)
-            )
+    choice = response.choices[0]
+    msg = choice.message
+    logger.info(
+        "Phase 1 VLM response (%.2fs): finish_reason=%s has_tool_calls=%s",
+        vlm_elapsed,
+        choice.finish_reason,
+        bool(msg.tool_calls),
+    )
 
-            vlm_start = time.perf_counter()
-            response = await client.chat.completions.create(
+    if not msg.tool_calls:
+        # Model didn't call a tool — unrecognized screen
+        narration = (
+            "I have not been trained to recognize that screen. "
+            "If it is important to you, please let Steve know."
+        )
+        has_errors = False
+    else:
+        # Dispatch the first tool call
+        tc = msg.tool_calls[0]
+        name = tc.function.name
+        try:
+            args = json.loads(tc.function.arguments)
+        except json.JSONDecodeError:
+            args = {}
+
+        logger.info("Phase 1 tool call: %s args=%s", name, args)
+
+        async with httpx.AsyncClient() as http:
+            tool_start = time.perf_counter()
+            try:
+                result = await _dispatch_tool(name, args, image_b64, http)
+                tool_elapsed = time.perf_counter() - tool_start
+                logger.info("OCR tool %s completed in %.2fs", name, tool_elapsed)
+
+                if isinstance(result, dict) and "error" not in result:
+                    fields = {k: v for k, v in result.items() if k != "ocr_raw"}
+                else:
+                    logger.warning("OCR tool returned error: %s", result)
+                    has_errors = True
+
+            except Exception as exc:
+                tool_elapsed = time.perf_counter() - tool_start
+                logger.warning("OCR tool %s failed after %.2fs: %s", name, tool_elapsed, exc)
+                result = {"error": str(exc)}
+                has_errors = True
+
+        # -------------------------------------------------------------------
+        # Phase 2 — Correction / Narration (separate VLM call, no tools)
+        # -------------------------------------------------------------------
+        if fields:
+            phase2_messages: list[dict] = [
+                {"role": "system", "content": _NARRATION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Here are the OCR-extracted fields from a {name.replace('crop_', '').replace('_', ' ')} screen:\n\n"
+                        f"{json.dumps(fields, indent=2)}\n\n"
+                        "Please review, correct any OCR errors, and narrate this for the player."
+                    ),
+                },
+            ]
+
+            vlm2_start = time.perf_counter()
+            response2 = await client.chat.completions.create(
                 model=MODEL_NAME,
-                messages=messages,
-                tools=TOOL_DEFINITIONS,
-                tool_choice="auto",
+                messages=phase2_messages,
             )
-            vlm_elapsed = time.perf_counter() - vlm_start
+            vlm2_elapsed = time.perf_counter() - vlm2_start
 
-            choice = response.choices[0]
-            msg = choice.message
-            logger.info(
-                "⏱️  VLM response (%.2fs): finish_reason=%s has_tool_calls=%s num_tool_calls=%d content_preview=%s",
-                vlm_elapsed,
-                choice.finish_reason,
-                bool(msg.tool_calls),
-                len(msg.tool_calls) if msg.tool_calls else 0,
-                (msg.content[:100] + "...") if msg.content and len(msg.content) > 100 else msg.content,
+            narration_content = response2.choices[0].message.content or ""
+            narration = narration_content.strip()
+            logger.info("Phase 2 narration (%.2fs): %s", vlm2_elapsed, narration[:200])
+        else:
+            narration = (
+                "There was an error extracting information from this screen. "
+                "I have logged it for review."
             )
-            if msg.tool_calls:
-                for tc in msg.tool_calls:
-                    logger.info("Tool call detected: name=%s id=%s args=%s",
-                               tc.function.name, tc.id, tc.function.arguments)
-
-            messages.append(msg.model_dump(exclude_none=True))
-
-            # Check for tool calls (vLLM bug: finish_reason may be "stop" even with tool_calls)
-            if msg.tool_calls:
-                for tc in msg.tool_calls:
-                    name = tc.function.name
-                    try:
-                        args = json.loads(tc.function.arguments)
-                    except json.JSONDecodeError:
-                        args = {}
-
-                    logger.info("Tool call: %s args=%s", name, args)
-
-                    tool_start = time.perf_counter()
-                    try:
-                        result = await _dispatch_tool(name, args, image_b64, http)
-                        tool_elapsed = time.perf_counter() - tool_start
-                        logger.info("⏱️  Tool %s completed in %.2fs", name, tool_elapsed)
-
-                        if name == "crop_pierres_detail_panel" and isinstance(result, dict):
-                            fields = {k: v for k, v in result.items() if k != "ocr_raw"}
-
-                    except Exception as exc:
-                        tool_elapsed = time.perf_counter() - tool_start
-                        logger.warning("⏱️  Tool %s failed after %.2fs: %s", name, tool_elapsed, exc)
-                        result = {"error": str(exc)}
-
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": json.dumps(result),
-                    })
-
-            elif choice.finish_reason == "stop":
-                # Qwen has finished — parse its JSON response
-                if msg.content:
-                    try:
-                        response_json = json.loads(msg.content)
-                        narration = response_json.get("narration", msg.content)
-                        has_errors = bool(response_json.get("has_errors", False))
-                    except json.JSONDecodeError:
-                        logger.warning("Qwen returned non-JSON content: %r", msg.content)
-                        narration = msg.content
-                        has_errors = False
-                turn_elapsed = time.perf_counter() - turn_start
-                logger.info("⏱️  Turn %d completed in %.2fs (loop ending, finish_reason=stop)", turn + 1, turn_elapsed)
-                break
-
-            else:
-                turn_elapsed = time.perf_counter() - turn_start
-                logger.warning(
-                    "⏱️  Turn %d completed in %.2fs - Unexpected finish_reason: %s — stopping loop",
-                    turn + 1, turn_elapsed, choice.finish_reason
-                )
-                break
-
-            turn_elapsed = time.perf_counter() - turn_start
-            logger.info("⏱️  Turn %d completed in %.2fs (continuing to next turn)", turn + 1, turn_elapsed)
 
     # Save error screenshot if needed
     if has_errors:
         _save_error(image_b64, fields)
 
-    # Call TTS directly (not a tool call)
+    # -----------------------------------------------------------------------
+    # Phase 3 — TTS
+    # -----------------------------------------------------------------------
     if narration:
         try:
             tts_start = time.perf_counter()
@@ -299,14 +283,14 @@ async def run_agent_loop(image_b64: str) -> dict:
                 resp.raise_for_status()
                 audio_bytes = resp.content
                 tts_elapsed = time.perf_counter() - tts_start
-                logger.info("⏱️  TTS synthesis succeeded in %.2fs (%d bytes)", tts_elapsed, len(audio_bytes))
+                logger.info("TTS synthesis succeeded in %.2fs (%d bytes)", tts_elapsed, len(audio_bytes))
         except Exception as exc:
             tts_elapsed = time.perf_counter() - tts_start
-            logger.error("⏱️  TTS synthesis failed after %.2fs: %s", tts_elapsed, exc, exc_info=True)
+            logger.error("TTS synthesis failed after %.2fs: %s", tts_elapsed, exc, exc_info=True)
             audio_bytes = None
 
     total_elapsed = time.perf_counter() - start_time
-    logger.info("⏱️  TOTAL agent loop completed in %.2fs", total_elapsed)
+    logger.info("TOTAL agent loop completed in %.2fs", total_elapsed)
 
     return {
         "narration": narration,

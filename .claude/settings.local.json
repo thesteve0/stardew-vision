@@ -137,7 +137,20 @@
       "Bash(oc logs:*)",
       "Bash(kubectl rollout status:*)",
       "Bash(kubectl get pods:*)",
-      "Bash(kubectl logs:*)"
+      "Bash(kubectl logs:*)",
+      "Bash(cp /tmp/stardew-vision-training/datasets/assets/templates/caught_fish_layout.json /workspaces/stardew-vision/services/ocr-tools/assets/templates/)",
+      "Bash(cp /tmp/stardew-vision-training/datasets/assets/templates/tv_dialog_layout.json /workspaces/stardew-vision/services/ocr-tools/assets/templates/)",
+      "Bash(cp /tmp/stardew-vision-training/datasets/assets/templates/pierre_panel_layout.json /workspaces/stardew-vision/services/ocr-tools/assets/templates/)",
+      "Bash(cp /tmp/stardew-vision-training/datasets/assets/templates/pierres_detail_panel_corner.png /workspaces/stardew-vision/services/ocr-tools/assets/templates/)",
+      "Bash(cp -r /tmp/stardew-vision-training/datasets/assets/sprites_game/* /workspaces/stardew-vision/services/ocr-tools/assets/sprites/)",
+      "Bash(oc set:*)",
+      "Bash(oc delete:*)",
+      "Bash(oc scale:*)",
+      "Bash(oc exec:*)",
+      "Read(//home/**)",
+      "Bash(ls -la /)",
+      "Bash(oc -n stardew-vision exec deployment/ocr-tools -- ls /app/assets/sprites/)",
+      "Bash(oc -n stardew-vision exec deployment/ocr-tools -- ls /app/assets/sprites_game/)"
     ]
   }
 }

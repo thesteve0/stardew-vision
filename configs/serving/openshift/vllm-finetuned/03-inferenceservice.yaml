@@ -1,0 +1,63 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: stardew-vlm-finetuned
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: vllm-finetuned
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    # GPU scheduling configuration
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+    # Model configuration
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: stardew-vlm-finetuned
+      storageUri: pvc://vllm-model-cache
+      args:
+        - --max-model-len=8192
+        - --limit-mm-per-prompt={"image":1}
+        - --enable-auto-tool-choice
+        - --tool-call-parser=hermes
+        - --chat-template=/mnt/chat-template/chat_template.jinja
+        # --- TFT (Time-to-First-Token) optimizations for single-user workloads ---
+        # This deployment serves 1 user at a time, so we optimize for per-request
+        # latency rather than throughput/concurrency.
+        #
+        # --max-num-seqs=1: Only process 1 sequence at a time. Eliminates batching
+        # overhead and dedicates all GPU compute to the single active request.
+        # Default is 256 which reserves capacity for concurrent requests we don't need.
+        - --max-num-seqs=1
+        #
+        # --gpu-memory-utilization=0.95: Allocate 95% of GPU memory (vs default 0.90).
+        # Since we're not sharing the GPU, we can safely use more memory for KV cache,
+        # reducing the chance of preemption or eviction.
+        - --gpu-memory-utilization=0.95
+        #
+        # --enable-prefix-caching: Cache KV blocks for repeated prompt prefixes.
+        # Every request uses the same system prompt (with baked-in tools), so the
+        # system prompt tokens are computed once and reused across requests,
+        # significantly reducing TTFT on subsequent requests.
+        - --enable-prefix-caching
+      # Resource requests and limits
+      resources:
+        requests:
+          cpu: "4"
+          memory: 24Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "8"
+          memory: 32Gi
+          nvidia.com/gpu: "1"

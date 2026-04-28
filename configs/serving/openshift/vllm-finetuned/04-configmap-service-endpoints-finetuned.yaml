@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-endpoints-finetuned
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+data:
+  # OCR Tool endpoint — unified service handling all 3 extraction tools
+  # (Pierre's shop, TV dialog, caught fish)
+  OCR_TOOL_URL: "http://ocr-tools:8004"
+
+  # TTS Tool endpoint
+  TTS_TOOL_URL: "http://tts-tool:8003"
+
+  # vLLM endpoint (fine-tuned model with LoRA adapter)
+  VLLM_BASE_URL: "http://stardew-vlm-finetuned-predictor:8080/v1"
+
+  # vLLM model ID (matches InferenceService name / LoRA module name)
+  VLLM_MODEL: "stardew-vlm-finetuned"
+
+  # Agent mode — selects the fine-tuned agent loop with baked-in tool prompt
+  AGENT_MODE: "finetuned"

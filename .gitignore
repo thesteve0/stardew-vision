@@ -222,3 +222,7 @@ mlruns/
 # Jupyter notebook outputs
 notebooks/*.html
 notebooks/*.png
+
+tmp/*
+tmp*
+tmp/

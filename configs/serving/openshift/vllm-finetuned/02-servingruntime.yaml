@@ -1,0 +1,62 @@
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: stardew-vlm-finetuned
+  namespace: stardew-vision
+  annotations:
+    opendatahub.io/apiProtocol: REST
+    opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
+    opendatahub.io/runtime-version: v0.13.0
+    opendatahub.io/serving-runtime-scope: global
+    opendatahub.io/template-display-name: vLLM NVIDIA GPU ServingRuntime for KServe (LoRA)
+    opendatahub.io/template-name: vllm-cuda-runtime-template
+    openshift.io/display-name: vLLM NVIDIA GPU ServingRuntime for KServe (LoRA fine-tuned)
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  annotations:
+    opendatahub.io/kserve-runtime: vllm
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
+  containers:
+  - name: kserve-container
+    image: registry.redhat.io/rhaiis/vllm-cuda-rhel9@sha256:ec799bb5eeb7e25b4b25a8917ab5161da6b6f1ab830cbba61bba371cffb0c34d
+    command:
+    - python
+    - -m
+    - vllm.entrypoints.openai.api_server
+    args:
+    - --port=8080
+    - --model=/mnt/models
+    - --served-model-name={{.Name}}
+    # --- LoRA adapter configuration ---
+    - --enable-lora
+    - --lora-modules={{.Name}}=/mnt/lora-adapter/model-output
+    - --max-lora-rank=16
+    env:
+    - name: HF_HOME
+      value: /tmp/hf_home
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    volumeMounts:
+    - name: chat-template
+      mountPath: /mnt/chat-template
+      readOnly: true
+    # LoRA adapter files from the training PVC (cross-namespace via static PV)
+    # Mount the full EFS volume; vLLM references the adapter at the full path
+    - name: lora-adapter
+      mountPath: /mnt/lora-adapter
+      readOnly: true
+  volumes:
+  - name: chat-template
+    configMap:
+      name: qwen-chat-template
+  - name: lora-adapter
+    persistentVolumeClaim:
+      claimName: lora-adapter
+      readOnly: true
+  multiModel: false
+  supportedModelFormats:
+  - name: vLLM
+    autoSelect: true

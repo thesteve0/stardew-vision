@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: lora-adapter-pv
+  labels:
+    app: stardew-vision
+    component: lora-adapter
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  # Static binding — no storageClass, pre-bound to PVC in stardew-vision
+  storageClassName: ""
+  claimRef:
+    namespace: stardew-vision
+    name: lora-adapter
+  csi:
+    driver: efs.csi.aws.com
+    # Same EFS access point as training-checkpoints PVC in stardew-vision-training.
+    # This gives the stardew-vision namespace read access to the LoRA adapter files
+    # produced by fine-tuning (at /checkpoints/model-output/).
+    volumeHandle: "fs-0d04e1e511446bd34::fsap-05ba45918d7d377c1"

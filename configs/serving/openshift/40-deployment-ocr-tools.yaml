@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocr-tools
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: ocr-tools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: ocr-tools
+  template:
+    metadata:
+      labels:
+        app: stardew-vision
+        component: ocr-tools
+    spec:
+      # Init container: pre-download PaddleOCR models so first request is fast
+      initContainers:
+        - name: download-models
+          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.2.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              uv run python -c "from stardew_ocr_tools.common import load_ocr; load_ocr()" || true
+          env:
+            - name: PADDLEX_HOME
+              value: /cache/paddlex
+            - name: PADDLEX_CACHE_DIR
+              value: /cache/paddlex/cache
+            - name: PADDLE_HUB_HOME
+              value: /cache/paddlex/hub
+            - name: PADDLE_OCR_BASE_DIR
+              value: /cache/paddleocr
+            - name: HF_HOME
+              value: /cache/huggingface
+            - name: FLAGS_use_mkldnn
+              value: "0"
+          volumeMounts:
+            - name: paddlex-cache
+              mountPath: /cache
+      containers:
+        - name: ocr-tools
+          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.2.1
+          ports:
+            - containerPort: 8004
+              protocol: TCP
+          env:
+            - name: PADDLEX_HOME
+              value: /cache/paddlex
+            - name: PADDLEX_CACHE_DIR
+              value: /cache/paddlex/cache
+            - name: PADDLE_HUB_HOME
+              value: /cache/paddlex/hub
+            - name: PADDLE_OCR_BASE_DIR
+              value: /cache/paddleocr
+            - name: HF_HOME
+              value: /cache/huggingface
+            - name: FLAGS_use_mkldnn
+              value: "0"
+            - name: FLAGS_use_xdnn
+              value: "0"
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 4Gi
+            limits:
+              cpu: 2500m
+              memory: 8Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 6
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: paddlex-cache
+              mountPath: /cache
+      volumes:
+        - name: paddlex-cache
+          persistentVolumeClaim:
+            claimName: paddlex-cache-ocr-tools
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ocr-tools
+  namespace: stardew-vision
+spec:
+  selector:
+    component: ocr-tools
+  ports:
+    - port: 8004
+      targetPort: 8004
+      protocol: TCP

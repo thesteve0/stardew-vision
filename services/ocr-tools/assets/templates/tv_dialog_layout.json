@@ -1,0 +1,14 @@
+{
+  "screen_type": "tv_dialog",
+  "extracted_from_resolution": [1600, 1200],
+  "regions": {
+    "dialog_box": {
+      "x": 0.1025,
+      "y": 0.71,
+      "w": 0.68,
+      "h": 0.28,
+      "description": "Dialog text box at bottom of screen (tan/wooden border, padded)"
+    }
+  },
+  "notes": "Initial estimates from 2_tv_second.jpg with padding. The dialog box is a fixed UI element anchored to the bottom — less positional variability than caught_fish."
+}

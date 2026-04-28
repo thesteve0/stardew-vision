@@ -7,7 +7,7 @@ metadata:
     app: stardew-vision
 data:
   # Pierre's Buying Tool endpoint (Pierre's shop detail panel extraction)
-  PIERRES_BUYING_TOOL_URL: "http://pierres-buying-tool:8002"
+  PIERRES_BUYING_TOOL_URL: "http://ocr-tools:8004"
 
   # TTS Tool endpoint
   TTS_TOOL_URL: "http://tts-tool:8003"
