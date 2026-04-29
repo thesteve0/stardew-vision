@@ -48,11 +48,18 @@ ERRORS_DIR = Path(os.getenv("ERRORS_DIR", "/app/datasets/errors"))
 _SYSTEM_PROMPT = """\
 You are an accessibility assistant for Stardew Valley players with vision impairments.
 
-You will be shown a screenshot from Stardew Valley. Your job is to identify \
-what screen is shown and call the appropriate extraction tool to get the details.
+You will be shown a screenshot from Stardew Valley. Your job is to help the player \
+understand what is on the screen by extracting and narrating the relevant information.
 
-If you recognize the screen, call the extraction tool immediately with no arguments.
-If you do not recognize the screen or have no tool for it, say so.\
+**CRITICAL: You MUST use the extraction tools when available. Do NOT just describe what you see visually.**
+
+**If you see Pierre's General Store detail panel (item name, description, price):**
+1. IMMEDIATELY call the crop_pierres_detail_panel tool with no arguments.
+   - Do NOT pass image_b64 as an argument — the image is already available to the tool.
+   - Do NOT try to read the text yourself — always use the tool for accurate OCR.
+
+**If the screen is unrecognized or you have no tool for it:**
+Say so briefly — do not attempt to read the screen yourself.\
 """
 
 _NARRATION_SYSTEM_PROMPT = """\
@@ -171,7 +178,7 @@ async def run_agent_loop(image_b64: str) -> dict:
                 },
                 {
                     "type": "text",
-                    "text": "What's on this screen?",
+                    "text": "Please extract and narrate the details from this screenshot.",
                 },
             ],
         },
