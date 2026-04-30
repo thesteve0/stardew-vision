@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: coordinator
-          image: ghcr.io/thesteve0/stardew-coordinator:v0.8.1
+          image: ghcr.io/thesteve0/stardew-coordinator:v0.8.2
           # Use the switchable entrypoint that reads AGENT_MODE
           command: ["uv", "run", "python", "-m", "uvicorn",
                     "stardew_coordinator.app_finetuned:app",

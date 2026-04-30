@@ -248,7 +248,7 @@ async def run_agent_loop(image_b64: str) -> dict:
                 {
                     "role": "user",
                     "content": (
-                        f"Here are the OCR-extracted fields from a {name.replace('crop_', '').replace('_', ' ')} screen:\n\n"
+                        f"Here are the OCR-extracted fields from the screenshot:\n\n"
                         f"{json.dumps(fields, indent=2)}\n\n"
                         "Please review, correct any OCR errors, and narrate this for the player."
                     ),

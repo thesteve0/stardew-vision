@@ -82,6 +82,15 @@ Respond with ONLY the narration text — no JSON, no markup, no preamble.\
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _narrate_caught_fish(fields: dict) -> str:
+    """Build narration for caught fish directly from OCR fields."""
+    fish_name = fields.get("fish_name", "something")
+    length = fields.get("length_inches")
+    if length is not None:
+        return f"You caught a {fish_name} and it is {length} inches long."
+    return f"You caught a {fish_name}."
+
+
 _TOOL_CALL_RE = re.compile(
     r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL
 )
@@ -270,31 +279,35 @@ async def run_agent_loop_finetuned(image_b64: str) -> dict:
                 has_errors = True
 
         # -------------------------------------------------------------------
-        # Phase 2 — Correction / Narration (separate VLM call, no tools)
+        # Phase 2 — Correction / Narration
         # -------------------------------------------------------------------
         if fields:
-            phase2_messages: list[dict] = [
-                {"role": "system", "content": _NARRATION_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Here are the OCR-extracted fields from a {name.replace('crop_', '').replace('_', ' ')} screen:\n\n"
-                        f"{json.dumps(fields, indent=2)}\n\n"
-                        "Please review, correct any OCR errors, and narrate this for the player."
-                    ),
-                },
-            ]
+            if name == "crop_caught_fish_notification":
+                narration = _narrate_caught_fish(fields)
+                logger.info("Phase 2 narration (template): %s", narration)
+            else:
+                phase2_messages: list[dict] = [
+                    {"role": "system", "content": _NARRATION_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Here are the OCR-extracted fields from the screenshot:\n\n"
+                            f"{json.dumps(fields, indent=2)}\n\n"
+                            "Please review, correct any OCR errors, and narrate this for the player."
+                        ),
+                    },
+                ]
 
-            vlm2_start = time.perf_counter()
-            response2 = await client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=phase2_messages,
-            )
-            vlm2_elapsed = time.perf_counter() - vlm2_start
+                vlm2_start = time.perf_counter()
+                response2 = await client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=phase2_messages,
+                )
+                vlm2_elapsed = time.perf_counter() - vlm2_start
 
-            narration_content = response2.choices[0].message.content or ""
-            narration = narration_content.strip()
-            logger.info("Phase 2 narration (%.2fs): %s", vlm2_elapsed, narration[:200])
+                narration_content = response2.choices[0].message.content or ""
+                narration = narration_content.strip()
+                logger.info("Phase 2 narration (%.2fs): %s", vlm2_elapsed, narration[:200])
         else:
             # OCR failed — use error narration
             narration = (

@@ -152,7 +152,8 @@
       "Bash(oc -n stardew-vision exec deployment/ocr-tools -- ls /app/assets/sprites/)",
       "Bash(oc -n stardew-vision exec deployment/ocr-tools -- ls /app/assets/sprites_game/)",
       "Bash(oc -n stardew-vision exec deployment/ocr-tools -- cat /app/stardew_ocr_tools/crop_caught_fish.py)",
-      "Bash(oc rollout:*)"
+      "Bash(oc rollout:*)",
+      "Bash(grep -E \"\\\\.\\(yaml|yml\\)$\")"
     ]
   }
 }
