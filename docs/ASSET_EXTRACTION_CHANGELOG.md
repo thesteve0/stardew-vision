@@ -69,9 +69,9 @@ Quality stars and font assets have been extracted directly from Stardew Valley g
 ```
 
 **References Added:**
-- [Asset Extraction Summary](../../datasets/assets/EXTRACTION_SUMMARY.md)
-- [Overlay Collection Guide](../overlay-collection-guide.md)
-- [Data Collection Plan](../data-collection-plan.md)
+- [Asset Extraction Summary](#summary)
+- [Overlay Collection Guide](overlay-collection-guide.md)
+- [Data Collection Plan](data-collection-plan.md)
 
 ---
 

@@ -78,7 +78,7 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: stardew-vision-finetuned
+  name: stardew-vision
   namespace: stardew-vision
   annotations:
     haproxy.router.openshift.io/timeout: 3m

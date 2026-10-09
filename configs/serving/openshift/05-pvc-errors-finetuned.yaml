@@ -5,6 +5,7 @@ metadata:
   name: error-screenshots-finetuned
   namespace: stardew-vision
 spec:
+  storageClassName: gp3-csi
   accessModes:
     - ReadWriteOnce
   resources:

@@ -1,5 +1,13 @@
 # Lessons Learned
 
+> **Historical context, not current deployment instructions.** The verified
+> fine-tuned Qwen2.5-VL-7B deployment uses vLLM 0.13, baked-in tool schemas,
+> unified OCR (8004), Kokoro (8003), and coordinator-finetuned (8000), one replica
+> each. The original `stardew-vision` Route targets the fine-tuned coordinator.
+> Old base-model commands, stub/MeloTTS paths, planned milestones, accuracy
+> targets, and timings below must not be treated as verified current behavior.
+> Use the [canonical OpenShift guide](configs/serving/openshift/README.md).
+
 This document captures important lessons learned during development that should inform future projects.
 
 ## OpenShift Permissions vs Local Devcontainer
@@ -164,6 +172,6 @@ def _load_ocr():
 
 **Files Changed:**
 - `services/pierres_buying_tool/stardew_pierres_buying/crop_pierres_detail_panel.py` - Added `_OCR_INSTANCE` global cache
-- `configs/serving/openshift/10-deployment-pierres-buying-tool.yaml` - Increased memory limits to 4Gi request, 8Gi limit
+- Historical Pierre-only deployment (retired) - Increased memory limits to 4Gi request, 8Gi limit; current unified OCR settings are in `configs/serving/openshift/40-deployment-ocr-tools.yaml`
 
 **Related:** See ADR-012 for full OpenShift deployment architecture including model caching strategy.

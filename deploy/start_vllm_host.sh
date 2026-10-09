@@ -31,8 +31,26 @@
 # prompt inspection, then remove before testing tool calls.
 #   -e VLLM_LOGGING_LEVEL=DEBUG \
 
+# Experimental AMD development runtime, not the production deployment.
+# Use ./deploy/deploy-to-openshift.sh for the verified NVIDIA/OpenShift stack.
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE="${SCRIPT_DIR}/../configs/serving/qwen2_5_vl_tool_template.jinja"
+: "${BASE_MODEL_DIR:?Set BASE_MODEL_DIR to the downloaded pinned base model directory}"
+: "${LORA_ADAPTER_DIR:?Set LORA_ADAPTER_DIR to the pinned HF adapter directory}"
+python3 - <<'PY'
+import hashlib, os
+from pathlib import Path
+expected = {
+    'adapter_model.safetensors': '373c475669049191527b3d8e8a330f347f236855482bb2282f9604177a915a63',
+    'adapter_config.json': '449c057c21c46e3bc0d32d4d7a3590112927c756ae4a7e0ec6326cdc91e2e478',
+}
+for name, digest in expected.items():
+    with (Path(os.environ['LORA_ADAPTER_DIR']) / name).open('rb') as stream:
+        assert hashlib.file_digest(stream, 'sha256').hexdigest() == digest, name
+metadata = list((Path(os.environ['BASE_MODEL_DIR']) / '.cache/huggingface/download').rglob('*.metadata'))
+assert metadata and all(p.read_text().splitlines()[0] == 'cc594898137f460bfe9f0759e9844b3ce807cfb5' for p in metadata), 'Base revision mismatch'
+PY
 
 docker run --rm \
   --device=/dev/kfd \
@@ -42,15 +60,19 @@ docker run --rm \
   --security-opt seccomp=unconfined \
   --ipc=host \
   -p 8001:8000 \
-  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -v "${BASE_MODEL_DIR}":/mnt/models:ro \
+  -v "${LORA_ADAPTER_DIR}":/mnt/lora-adapter:ro \
   -v "${TEMPLATE}":/chat_template.jinja \
-  -e HF_TOKEN=$HF_TOKEN \
   -e VLLM_DEBUG_LOG_API_SERVER_RESPONSE=True \
   rocm/vllm:rocm7.12.0_gfx1151_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0 \
-  vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
+  vllm serve /mnt/models \
+  --served-model-name qwen-base \
+  --enable-lora \
+  --lora-modules stardew-vlm-finetuned=/mnt/lora-adapter \
+  --max-lora-rank 16 \
   --dtype float16 \
   --port 8000 \
-  --max-model-len 4096 \
+  --max-model-len 8192 \
   --limit-mm-per-prompt '{"image": 1}' \
   --enable-auto-tool-choice \
   --tool-call-parser hermes \

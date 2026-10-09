@@ -1,203 +1,76 @@
 # Stardew Vision Quick Start
 
-**Last updated**: 2026-04-03
+The current verified application is the **fine-tuned OpenShift deployment**, not
+the old base-model/stub-TTS local demo. The single source of deployment details is
+the [OpenShift guide](configs/serving/openshift/README.md).
 
-## Architecture Overview
+## Current Verified OpenShift Deployment
 
+The canonical deployment is **fine-tuned Qwen2.5-VL-7B-Instruct**, served by
+**vLLM 0.13** through KServe. Tool schemas are baked into the classification
+system prompt to match training; the coordinator parses `<tool_call>` output
+rather than sending an OpenAI `tools=` schema. It dispatches OCR over HTTP, then
+produces narration (a separate correction/narration model call for Pierre's shop
+and TV; deterministic narration for caught fish) and calls Kokoro TTS directly.
+
+```text
+Original Route stardew-vision → coordinator-finetuned:8000 (1 replica)
+  ├─ stardew-vlm-finetuned-predictor:8080/v1 (vLLM 0.13, 1 replica, GPU)
+  ├─ ocr-tools:8004 (unified OCR, 1 replica, CPU)
+  └─ tts-tool:8003 (Kokoro, 1 replica, CPU)
 ```
-Host Machine                           Devcontainer
-┌─────────────────────────┐           ┌──────────────────────────────┐
-│ vLLM Docker Container   │           │ FastAPI Webapp               │
-│                         │           │   + Extraction Tools         │
-│ Qwen2.5-VL-7B-Instruct  │◄──────────┤   + TTS (stub)               │
-│ ROCm 7.12 / gfx1151     │  Port     │                              │
-│                         │  8001     │ Connects to vLLM via         │
-│ Port 8000 → 8001        │           │ http://localhost:8001/v1     │
-└─────────────────────────┘           └──────────────────────────────┘
-```
 
-**Why this architecture?**
-- vLLM ROCm support for Strix Halo (gfx1151) works best in official AMD container
-- Avoids dependency conflicts in devcontainer
-- FastAPI can still run in devcontainer with forwarded ports
+- Private Hugging Face LoRA adapter: `TheSteve0/stardew-vision-qwen-tool-select-v1`
+  at revision **`73cb70b1718e2a09af55d823701fcd26b3c6a333`**. An operator-provided
+  `huggingface-adapter` Secret with a `token` key must have access to this repo;
+  never commit credentials.
+- API/model ID: `stardew-vlm-finetuned` (not `qwen-base`).
+- Digest-pinned application images in the manifests: coordinator **v0.8.2**,
+  unified OCR **v0.3.5**, TTS **v0.4.0**. Use the committed digests, not `latest`.
+- Model manifests: `configs/serving/openshift/vllm-finetuned/`; shared chat
+  template: `configs/serving/openshift/02-configmap-chat-template.yaml`.
+- `31-deployment-coordinator-finetuned.yaml` owns the sole primary Route
+  `stardew-vision`, targeting `coordinator-finetuned`; no separate route-switch
+  manifest or base-model deployment is needed.
 
----
-
-## Step 1: Start vLLM (On Host)
-
-**Open a terminal on your host machine** (not in devcontainer):
+From the repository root, after completing the prerequisites in the
+[canonical OpenShift deployment guide](configs/serving/openshift/README.md):
 
 ```bash
-docker run --rm \
-  --device=/dev/kfd \
-  --device=/dev/dri \
-  --group-add=video \
-  --cap-add=SYS_PTRACE \
-  --security-opt seccomp=unconfined \
-  --ipc=host \
-  -p 8001:8000 \
-  -v ~/.cache/huggingface:/root/.cache/huggingface \
-  -e HF_TOKEN=$HF_TOKEN \
-  rocm/vllm:rocm7.12.0_gfx1151_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0 \
-  vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
-  --dtype float16 \
-  --port 8000 \
-  --enable-auto-tool-choice \
-  --tool-call-parser hermes
+./deploy/deploy-to-openshift.sh
 ```
 
-**Wait ~5-8 minutes** for startup. Look for:
-```
-INFO: Application startup complete.
-INFO: Uvicorn running on http://0.0.0.0:8000
-```
+This wrapper invokes `configs/serving/openshift/deploy.sh`. Follow that guide for
+storage topology, download/hash verification, readiness checks, and migration.
+Do not recursively apply the manifest directory. Hash verification establishes
+artifact identity, not model quality; historical evaluation accuracy must not be
+attributed to this pinned adapter without fresh evaluation.
 
-**Test from host:**
-```bash
-curl http://localhost:8001/v1/models
-```
+## Verify and Use
 
----
-
-## Step 2: Rebuild Devcontainer
-
-The devcontainer needs ports 8000 and 8001 forwarded to access vLLM and serve FastAPI.
-
-**In IntelliJ or VSCode:**
-1. Open Command Palette / Actions: `F1` or `Ctrl+Shift+P`
-2. Type: "Dev Containers: Rebuild Container"
-3. Select and wait for rebuild
-
-**After rebuild, test from devcontainer:**
-```bash
-curl http://host.docker.internal:8001/v1/models
-```
-
-You should see the same model list response.
-
-> **Note**: Inside the devcontainer, use `host.docker.internal` (not `localhost`) to reach the host machine. `localhost` refers to the container itself. The `VLLM_BASE_URL` env var in `devcontainer.json` is already set correctly to `http://host.docker.internal:8001/v1`.
-
----
-
-## Step 3: Start FastAPI (In Devcontainer)
-
-**Open terminal inside devcontainer:**
+After the deploy script's readiness checks succeed:
 
 ```bash
-uvicorn src.stardew_vision.webapp.app:app --host 0.0.0.0 --port 8000 --reload
+oc get pods -n stardew-vision
+oc get route stardew-vision -n stardew-vision -o jsonpath='{.spec.host}'
 ```
 
-**Test health endpoint:**
-```bash
-curl http://localhost:8000/health
-```
+Open `https://<route-host>` and upload a Pierre's shop, TV dialog, or caught-fish
+screenshot. Classification selects a supported unified OCR tool, the coordinator
+assembles narration, and Kokoro returns WAV audio. Unsupported screens receive a
+fallback narration. TTS is not a model tool call.
 
-Expected: `{"status":"healthy"}`
+For diagnostics, consult the [canonical guide](configs/serving/openshift/README.md),
+including private adapter access, RWO storage topology, and download Job failures.
+Do not replace the pinned adapter or runtime based on historical accuracy claims.
 
----
+## Local Development and Design History
 
-## Step 4: Test Agent Loop
-
-**POST a test image:**
-
-```bash
-curl -s -X POST http://localhost:8000/analyze \
-  -F "file=@tests/fixtures/pierre_shop_001.png" | jq .
-```
-
-**Expected flow (watch FastAPI logs):**
-1. Image received and encoded
-2. Turn 1: Qwen calls `crop_pierres_detail_panel`
-3. Turn 2: Qwen reviews OCR, corrects typos
-4. Turn 3: Qwen assembles narration
-5. Turn 4: Qwen calls `text_to_speech` (stub)
-6. JSON response returned
-
-**Expected response:**
-```json
-{
-  "narration": "You are looking at Parsnip Seeds. Plant these in the spring...",
-  "extraction": {
-    "name": "Parsnip Seeds",
-    "description": "Plant these in the spring. Takes 4 days to mature.",
-    "price_per_unit": 20,
-    "quantity_selected": 60,
-    "total_cost": 1200
-  },
-  "has_errors": false
-}
-```
-
----
-
-## Next Steps
-
-Once the agent loop is verified:
-
-### 1. Wire Real TTS
-```bash
-# Install MeloTTS
-pip install git+https://github.com/myshell-ai/MeloTTS.git
-
-# Update src/stardew_vision/tts/synthesize.py
-# Test TTS in isolation
-python -c "from stardew_vision.tts.synthesize import text_to_audio_bytes; import sys; sys.stdout.buffer.write(text_to_audio_bytes('Test'))" > test.wav
-aplay test.wav
-```
-
-### 2. Return Audio from /analyze
-- Update `src/stardew_vision/webapp/routes.py`
-- Change response from JSON to `StreamingResponse(media_type="audio/wav")`
-
-Test:
-```bash
-curl -X POST http://localhost:8000/analyze \
-  -F "file=@tests/fixtures/pierre_shop_001.png" \
-  --output response.wav
-
-aplay response.wav
-```
-
-### 3. Fine-Tuning
-- Collect multi-screen-type screenshots (50+ per type)
-- Fine-tune Qwen on screen classification + tool dispatch
-- Target: 95% classification accuracy, 90% field extraction accuracy
-
----
-
-## Troubleshooting
-
-### vLLM won't start
-```bash
-# Check GPU access
-ls -la /dev/kfd /dev/dri
-
-# Check ROCm version
-rocm-smi
-
-# Verify Docker can access GPU
-docker run --rm --device=/dev/kfd --device=/dev/dri rocm/pytorch:latest rocm-smi
-```
-
-### Port 8001 not accessible from devcontainer
-```bash
-# Verify forwardPorts in .devcontainer/devcontainer.json
-cat .devcontainer/devcontainer.json | grep forwardPorts
-# Should show: "forwardPorts": [6006, 8888, 8000, 8001]
-
-# If missing, rebuild devcontainer
-```
-
-### Tool calls not firing
-- Try `--tool-call-parser qwen2_5` instead of `hermes`
-- Check vLLM logs: `docker logs <container_id>`
-- Verify `--enable-auto-tool-choice` flag is present
-
----
-
-## Detailed Documentation
-
-- **Full testing guide**: `docs/TESTING_AGENT_LOOP.md`
-- **Architecture decisions**: `docs/adr/009-agent-tool-calling-architecture.md`
-- **Project plan**: `docs/plan.md`
-- **Project context**: `CLAUDE.md`
+- [CLAUDE.md](CLAUDE.md): project context and local ROCm development constraints.
+- [vLLM notes](docs/vllm-notes.md): local AMD/ROCm experiments, distinct from the
+  production CUDA vLLM 0.13 runtime.
+- [Architecture decisions](docs/adr/): historical rationale; superseded sections
+  are not current deployment instructions.
+- [Project plan](docs/plan.md): historical planning milestones.
+- Training and evaluation live in
+  [stardew-vision-training](https://github.com/thesteve0/stardew-vision-training).

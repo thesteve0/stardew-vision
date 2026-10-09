@@ -4,6 +4,13 @@
 **Status**: Accepted
 **Deciders**: Project team
 
+> **Deployment details superseded**: This ADR preserves the historical decision
+> and rationale, not current operations. The verified deployment uses fine-tuned
+> Qwen2.5-VL-7B with vLLM 0.13, baked-in tool schemas, unified OCR on 8004, Kokoro
+> on 8003, and `coordinator-finetuned` on 8000 (one replica each). The original
+> `stardew-vision` Route targets that coordinator. See the
+> [canonical deployment guide](../../configs/serving/openshift/README.md) for pinned artifacts and safe commands.
+
 ## Context
 
 The application was initially developed in a local devcontainer with:
@@ -161,30 +168,12 @@ All images pushed to GitHub Container Registry (ghcr.io):
 - `ghcr.io/thesteve0/stardew-tts-tool:v0.4.0`
 - `ghcr.io/thesteve0/stardew-coordinator:v0.6.0`
 
-### Deployment Order
+### Deployment Order (superseded)
 
-```bash
-# 1. Create namespace
-kubectl create namespace stardew-vision
-
-# 2. Create PVCs
-kubectl apply -f configs/serving/openshift/02-pvc-paddlex-cache.yaml
-kubectl apply -f configs/serving/openshift/03-pvc-hf-cache.yaml
-kubectl apply -f configs/serving/openshift/04-pvc-errors.yaml
-
-# 3. Create ConfigMaps
-kubectl apply -f configs/serving/openshift/01-configmap-endpoints.yaml
-kubectl apply -f configs/serving/openshift/vllm/04-configmap-chat-template.yaml
-
-# 4. Deploy vLLM (KServe)
-kubectl apply -f configs/serving/openshift/vllm/02-servingruntime-with-template.yaml
-kubectl apply -f configs/serving/openshift/vllm/03-inferenceservice.yaml
-
-# 5. Deploy microservices
-kubectl apply -f configs/serving/openshift/10-deployment-pierres-buying-tool.yaml
-kubectl apply -f configs/serving/openshift/20-deployment-tts-tool.yaml
-kubectl apply -f configs/serving/openshift/30-deployment-coordinator.yaml
-```
+Do not apply the historical base-model manifests from this ADR. Follow the
+[canonical deployment guide](../../configs/serving/openshift/README.md) and run
+`./deploy/deploy-to-openshift.sh` from the repository root. The wrapper calls
+`configs/serving/openshift/deploy.sh`; only fine-tuned model manifests remain.
 
 ## Alternatives Considered
 

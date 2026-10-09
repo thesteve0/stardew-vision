@@ -1,8 +1,16 @@
 # Stardew Vision: Project Plan
 
+> **Historical context, not current deployment instructions.** The verified
+> fine-tuned Qwen2.5-VL-7B deployment uses vLLM 0.13, baked-in tool schemas,
+> unified OCR (8004), Kokoro (8003), and coordinator-finetuned (8000), one replica
+> each. The original `stardew-vision` Route targets the fine-tuned coordinator.
+> Old base-model commands, stub/MeloTTS paths, planned milestones, accuracy
+> targets, and timings below must not be treated as verified current behavior.
+> Use the [canonical OpenShift guide](../configs/serving/openshift/README.md).
+
 **Last updated**: 2026-04-13
 **Talk deadline**: ~1 month
-**Status**: ✅ **Phase 1 MVP DEPLOYED TO PRODUCTION** — Full agent loop operational on OpenShift AI. Pierre's shop OCR working end-to-end with audio output. Performance: ~5-7s per request (models cached in memory). **NEXT**: Phase 2 fine-tuning — train Qwen on multi-screen recognition and improved narration quality.
+**Current deployment status**: The pinned fine-tuned adapter is deployed; see the canonical guide above. The April phase summaries below are historical milestones, not current rollout or evaluation results.
 
 **Phase 1 Completion Summary**:
 - ✅ Extraction tool: PaddleOCR + OpenCV template matching (93% field accuracy, 9/9 tests passing)
@@ -13,7 +21,7 @@
 - ✅ Error handling: Screenshots saved to PVC, comprehensive timing logs
 - ✅ Tool calling: Custom chat template for Qwen via KServe ConfigMap
 
-**CURRENT FOCUS**: Phase 2 Fine-Tuning
+**Historical April focus**: Phase 2 Fine-Tuning
 - Collect multi-screen-type training data (Pierre's shop, TV dialog, inventory tooltip)
 - Annotate screenshots with expected tool calls and narrations
 - Fine-tune Qwen2.5-VL-7B on screen classification + tool dispatch
@@ -22,50 +30,12 @@
 
 **Note**: Training, dataset preparation, and evaluation now live in the **[stardew-vision-training](https://github.com/thesteve0/stardew-vision-training)** repository. This repo contains application/serving code only.
 
-## vLLM Start Command (Run on Host Machine)
+## Deployment Instructions
 
-**Architecture Decision (2026-04-03):** vLLM runs in Docker container on the **host machine** (not in devcontainer) due to gfx1151 (Strix Halo) ROCm compatibility. The devcontainer connects to vLLM via forwarded port 8001.
-
-```bash
-# Run this on your host machine (outside devcontainer)
-docker run --rm \
-  --device=/dev/kfd \
-  --device=/dev/dri \
-  --group-add=video \
-  --cap-add=SYS_PTRACE \
-  --security-opt seccomp=unconfined \
-  --ipc=host \
-  -p 8001:8000 \
-  -v ~/.cache/huggingface:/root/.cache/huggingface \
-  -e HF_TOKEN=$HF_TOKEN \
-  rocm/vllm:rocm7.12.0_gfx1151_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0 \
-  vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
-  --dtype float16 \
-  --port 8000 \
-  --max-model-len 4096 \
-  --limit-mm-per-prompt '{"image": 1}' \
-  --enable-auto-tool-choice \
-  --tool-call-parser hermes
-```
-
-**Startup time:** ~5-8 minutes (model loading + encoder cache profiling for VLM)
-
-**Test server is running:**
-```bash
-# From host
-curl http://localhost:8001/v1/models
-
-# From devcontainer (after rebuild with forwarded ports)
-curl http://localhost:8001/v1/models
-```
-
-Expected response: JSON with `"id": "Qwen/Qwen2.5-VL-7B-Instruct"`
-
-If tool calls don't fire during testing, try `--tool-call-parser qwen2_5`.
-
-This is the authoritative project plan. It is referenced from `CLAUDE.md`. Update this document as decisions change; use the ADRs in `docs/adr/` to document *why* each decision was made.
-
----
+Use the [canonical OpenShift guide](../configs/serving/openshift/README.md) and
+`./deploy/deploy-to-openshift.sh` from the repository root. The old base-model
+start recipe has been retired. This document preserves the original project
+plan; use ADRs to understand the historical rationale.
 
 ## Project Goals
 

@@ -4,6 +4,13 @@
 **Status**: Accepted
 **Deciders**: Project team
 
+> **Deployment details superseded**: This ADR preserves the historical decision
+> and rationale, not current operations. The verified deployment uses fine-tuned
+> Qwen2.5-VL-7B with vLLM 0.13, baked-in tool schemas, unified OCR on 8004, Kokoro
+> on 8003, and `coordinator-finetuned` on 8000 (one replica each). The original
+> `stardew-vision` Route targets that coordinator. See the
+> [canonical deployment guide](../../configs/serving/openshift/README.md) for pinned artifacts and safe commands.
+
 ## Context
 
 The pipeline ends with converting a natural language description of loot box contents into an audio file returned to the user. The TTS step must:
@@ -79,17 +86,10 @@ def text_to_audio_bytes(description: str, speed: float = 1.0) -> bytes:
 - `device='auto'` mode - uses GPU if available in production, CPU in development
 - MeloTTS API as the audio I/O interface
 
-## Deployment
+## Deployment (superseded)
 
-**Development (AMD Strix Halo, ROCm 7.2)**: MeloTTS runs on CPU - no GPU required, no conflicts with VLM GPU usage.
-
-**Production (OpenShift AI, NVIDIA GPUs)**: Two deployment options:
-1. **Integrated** (recommended): MeloTTS runs inside FastAPI webapp pod on CPU (simple, one service)
-2. **Separate microservice**: MeloTTS as standalone service on CPU (can scale independently)
-
-Optional: GPU acceleration can be enabled in production by setting `device='cuda'` and allocating GPU resources to the pod. Not required for <2s latency target.
-
-**Docker**: MeloTTS model can be pre-downloaded at Docker build time for faster pod startup (~5-10s vs. first-request download).
+The historical MeloTTS deployment options are superseded by the Kokoro CPU
+microservice. Follow the [canonical deployment guide](../../configs/serving/openshift/README.md).
 
 ## Upgrade Path
 

@@ -155,7 +155,7 @@ Add **Quality Accuracy** metric:
 
 - [x] Update `configs/output_schema.json` to include `quality` field ✅
 - [x] Update annotation schema in `docs/data-collection-plan.md` ✅
-- [x] Add quality star sprites to `datasets/assets/` ✅ (extracted from game files - see [Asset Extraction Summary](../../datasets/assets/EXTRACTION_SUMMARY.md))
+- [x] Add quality star sprites to `datasets/assets/` ✅ (extracted from game files - see [Asset Extraction Summary](../ASSET_EXTRACTION_CHANGELOG.md#summary))
 - [x] Extract quantity text font assets ✅ (SmallFont.png + SmallFont.json from game files)
 - [ ] Update `scripts/generate_synthetic_data.py` to render quality stars and quantity text
 - [ ] Update VLM system prompt in `src/stardew_vision/models/vlm_wrapper.py`
@@ -181,12 +181,12 @@ Quality stars and font assets have been extracted directly from Stardew Valley g
 - Includes: Glyph coordinate data (`SmallFont.json`)
 - Location: `datasets/assets/quantity_overlays/`
 
-See [datasets/assets/EXTRACTION_SUMMARY.md](../../datasets/assets/EXTRACTION_SUMMARY.md) for complete extraction details and next steps.
+See [the preserved extraction changelog](../ASSET_EXTRACTION_CHANGELOG.md#summary) for complete extraction details and next steps.
 
 ## References
 
 - [ADR-001](001-vlm-selection.md): VLM selection — overlays validate the choice of VLMs over template matching
 - [ADR-002](002-vlm-role-architecture.md): Structured output architecture — flexible enough to add quality field
-- [Asset Extraction Summary](../../datasets/assets/EXTRACTION_SUMMARY.md): Quality stars and font extraction from game files (2026-03-06)
+- [Asset Extraction Summary](../ASSET_EXTRACTION_CHANGELOG.md#summary): Quality stars and font extraction from game files (2026-03-06)
 - [Overlay Collection Guide](../overlay-collection-guide.md): Originally planned manual collection workflow (superseded by direct extraction)
 - [Data Collection Plan](../data-collection-plan.md): Phase A asset acquisition status

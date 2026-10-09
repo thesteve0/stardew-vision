@@ -1,5 +1,13 @@
 # Testing the Agent Loop
 
+> **Historical context, not current deployment instructions.** The verified
+> fine-tuned Qwen2.5-VL-7B deployment uses vLLM 0.13, baked-in tool schemas,
+> unified OCR (8004), Kokoro (8003), and coordinator-finetuned (8000), one replica
+> each. The original `stardew-vision` Route targets the fine-tuned coordinator.
+> Old base-model commands, stub/MeloTTS paths, planned milestones, accuracy
+> targets, and timings below must not be treated as verified current behavior.
+> Use the [canonical OpenShift guide](../configs/serving/openshift/README.md).
+
 **Last updated**: 2026-04-03
 
 **What this is**: End-to-end test of the Qwen + FastAPI agentic loop. Upload a
@@ -22,72 +30,12 @@ audio yet. The `/analyze` endpoint returns JSON, not WAV.
 
 ---
 
-## Step 1 — Start vLLM (On Host Machine)
+## Deployment Prerequisite (superseded local recipe)
 
-**Run this on your host machine, outside the devcontainer:**
-
-```bash
-docker run --rm \
-  --device=/dev/kfd \
-  --device=/dev/dri \
-  --group-add=video \
-  --cap-add=SYS_PTRACE \
-  --security-opt seccomp=unconfined \
-  --ipc=host \
-  -p 8001:8000 \
-  -v ~/.cache/huggingface:/root/.cache/huggingface \
-  -e HF_TOKEN=$HF_TOKEN \
-  rocm/vllm:rocm7.12.0_gfx1151_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0 \
-  vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
-  --dtype float16 \
-  --port 8000 \
-  --enable-auto-tool-choice \
-  --tool-call-parser hermes
-```
-
-**Container details:**
-- Image: `rocm/vllm:rocm7.12.0_gfx1151_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0`
-- Built specifically for AMD Strix Halo (gfx1151) with ROCm 7.12
-- Includes PyTorch 2.9.1, vLLM 0.16.0
-
-**Startup time:** ~5-8 minutes
-- Model weight loading: ~2-3 minutes
-- Encoder cache profiling: ~2-5 minutes
-- Look for: `INFO: Application startup complete.` and `Uvicorn running on http://0.0.0.0:8000`
-
-**Test vLLM is running:**
-
-From host:
-```bash
-curl http://localhost:8001/v1/models
-```
-
-From devcontainer (after rebuild):
-```bash
-curl http://localhost:8001/v1/models
-```
-
-Expected response:
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "id": "Qwen/Qwen2.5-VL-7B-Instruct",
-      "object": "model",
-      ...
-    }
-  ]
-}
-```
-
-**Important flags:**
-- `--dtype float16` — required on ROCm 7.2 (AMD Strix Halo). Only validated precision.
-- `--enable-auto-tool-choice` — required for tool-calling to work
-- `--tool-call-parser hermes` — Qwen2.5 uses Hermes-style tool call format
-- Port mapping: Container port 8000 → Host port 8001
-
----
+Use the [canonical OpenShift deployment guide](../configs/serving/openshift/README.md)
+and [current quick start](../QUICKSTART.md). The remaining April test scenarios
+are historical examples for the stub-based local implementation, not acceptance
+tests for the current fine-tuned application.
 
 ## Step 2 — Start FastAPI (In Devcontainer)
 

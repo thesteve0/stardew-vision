@@ -1,5 +1,13 @@
 # Training Data Collection for Phase 2 Fine-Tuning
 
+> **Historical context, not current deployment instructions.** The verified
+> fine-tuned Qwen2.5-VL-7B deployment uses vLLM 0.13, baked-in tool schemas,
+> unified OCR (8004), Kokoro (8003), and coordinator-finetuned (8000), one replica
+> each. The original `stardew-vision` Route targets the fine-tuned coordinator.
+> Old base-model commands, stub/MeloTTS paths, planned milestones, accuracy
+> targets, and timings below must not be treated as verified current behavior.
+> Use the [canonical OpenShift guide](../configs/serving/openshift/README.md).
+
 **Status**: Ready to begin
 **Target**: 500-1000 annotated screenshot conversations
 **Timeline**: 2-3 weeks for data collection + annotation

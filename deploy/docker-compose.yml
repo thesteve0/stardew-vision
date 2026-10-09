@@ -1,41 +1,42 @@
+# Local client stack for development against an already running pinned LoRA
+# server. Production deployment is ./deploy/deploy-to-openshift.sh.
 services:
-
-  pierres-buying-tool:
-    build:
-      context: ..
-      dockerfile: services/pierres-buying-tool/Dockerfile
+  ocr-tools:
+    image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.5@sha256:feed35b85ab287bfedd2c5fbb478a191af794db418de274482a88ef207f31839
     ports:
-      - "8002:8002"
+      - "8004:8004"
     restart: unless-stopped
 
   tts-tool:
-    build:
-      context: ..
-      dockerfile: services/tts-tool/Dockerfile
+    image: ghcr.io/thesteve0/stardew-tts-tool:v0.4.0@sha256:2fad9aa8a9855b16dd078f3f1974fe9eaebc6964692d3edc52ab52c038706976
     ports:
       - "8003:8003"
     environment:
-      HF_HOME: /root/.cache/huggingface
+      HF_HOME: /cache
     volumes:
-      - huggingface-cache:/root/.cache/huggingface
+      - huggingface-cache:/cache
     restart: unless-stopped
 
   coordinator:
-    build:
-      context: ..
-      dockerfile: services/coordinator/Dockerfile
+    image: ghcr.io/thesteve0/stardew-coordinator:v0.8.2@sha256:dc178497d02248b4dab12046caf69c041d03b97704bbc35b8cd65e569cec75af
+    command: ["uv", "run", "--frozen", "python", "-m", "uvicorn", "stardew_coordinator.app_finetuned:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
     environment:
-      PIERRES_BUYING_TOOL_URL: http://pierres-buying-tool:8002
+      OCR_TOOL_URL: http://ocr-tools:8004
       TTS_TOOL_URL: http://tts-tool:8003
-      # vLLM runs on the host machine — host.docker.internal resolves to host
-      VLLM_BASE_URL: http://host.docker.internal:8001/v1
-      VLLM_MODEL: Qwen/Qwen2.5-VL-7B-Instruct
+      VLLM_BASE_URL: ${VLLM_BASE_URL:-http://host.docker.internal:8001/v1}
+      VLLM_MODEL: stardew-vlm-finetuned
+      AGENT_MODE: finetuned
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      - pierres-buying-tool
+      - ocr-tools
       - tts-tool
+    volumes:
+      - error-screenshots:/app/datasets/errors
     restart: unless-stopped
 
 volumes:
   huggingface-cache:
+  error-screenshots:

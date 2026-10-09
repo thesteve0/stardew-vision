@@ -6,36 +6,53 @@ An accessibility tool that lets visually impaired Stardew Valley players upload 
 
 Stardew Valley's UI text is small and rendered in pixel-art fonts. Players with vision impairments can read the game but struggle with small details — item names, prices, descriptions. They take a screenshot and want to hear those details narrated back to them.
 
-## How It Works
+## Current Verified OpenShift Deployment
 
-FastAPI is the **agent runtime** — it manages the loop, executes tool calls, holds state, and calls TTS. Qwen2.5-VL-7B is the **reasoner** — it classifies the screen, calls the appropriate OCR extraction tool if one exists, validates and corrects the result, and returns a structured JSON response.
+The canonical deployment is **fine-tuned Qwen2.5-VL-7B-Instruct**, served by
+**vLLM 0.13** through KServe. Tool schemas are baked into the classification
+system prompt to match training; the coordinator parses `<tool_call>` output
+rather than sending an OpenAI `tools=` schema. It dispatches OCR over HTTP, then
+produces narration (a separate correction/narration model call for Pierre's shop
+and TV; deterministic narration for caught fish) and calls Kokoro TTS directly.
 
-```
-User uploads screenshot
-  |
-  v
-FastAPI /analyze  (port 8000)
-  |
-  v
-Agent loop (Qwen2.5-VL-7B via vLLM, port 8001)
-  Turn 1: Qwen sees screenshot — does it match a known tool?
-    • Recognized screen → tool_call: crop_pierres_detail_panel → OCR JSON returned to Qwen
-    • Unrecognized screen → Qwen returns JSON immediately (no tool call)
-  Turn 2 (if tool was called): Qwen reviews OCR result, silently corrects typos,
-    returns final JSON: {"narration": "...", "has_errors": false|true}
-  |
-  v
-FastAPI parses JSON:
-  • has_errors=true → save screenshot to datasets/errors/, log failure
-  • Either way → call MeloTTS with narration text → WAV bytes
-  |
-  v
-Browser plays audio
+```text
+Original Route stardew-vision → coordinator-finetuned:8000 (1 replica)
+  ├─ stardew-vlm-finetuned-predictor:8080/v1 (vLLM 0.13, 1 replica, GPU)
+  ├─ ocr-tools:8004 (unified OCR, 1 replica, CPU)
+  └─ tts-tool:8003 (Kokoro, 1 replica, CPU)
 ```
 
-See [`docs/adr/009-agent-tool-calling-architecture.md`](docs/adr/009-agent-tool-calling-architecture.md) and [`docs/adr/011-agent-loop-refinements.md`](docs/adr/011-agent-loop-refinements.md) for the full design.
+- Private Hugging Face LoRA adapter: `TheSteve0/stardew-vision-qwen-tool-select-v1`
+  at revision **`73cb70b1718e2a09af55d823701fcd26b3c6a333`**. An operator-provided
+  `huggingface-adapter` Secret with a `token` key must have access to this repo;
+  never commit credentials.
+- API/model ID: `stardew-vlm-finetuned` (not `qwen-base`).
+- Digest-pinned application images in the manifests: coordinator **v0.8.2**,
+  unified OCR **v0.3.5**, TTS **v0.4.0**. Use the committed digests, not `latest`.
+- Model manifests: `configs/serving/openshift/vllm-finetuned/`; shared chat
+  template: `configs/serving/openshift/02-configmap-chat-template.yaml`.
+- `31-deployment-coordinator-finetuned.yaml` owns the sole primary Route
+  `stardew-vision`, targeting `coordinator-finetuned`; no separate route-switch
+  manifest or base-model deployment is needed.
 
-## Dataset
+From the repository root, after completing the prerequisites in the
+[canonical OpenShift deployment guide](configs/serving/openshift/README.md):
+
+```bash
+./deploy/deploy-to-openshift.sh
+```
+
+This wrapper invokes `configs/serving/openshift/deploy.sh`. Follow that guide for
+storage topology, download/hash verification, readiness checks, and migration.
+Do not recursively apply the manifest directory. Hash verification establishes
+artifact identity, not model quality; historical evaluation accuracy must not be
+attributed to this pinned adapter without fresh evaluation.
+
+## Historical Phase 1 Dataset
+
+Training, dataset preparation, and current evaluation live in
+[stardew-vision-training](https://github.com/thesteve0/stardew-vision-training).
+The following describes the original Phase 1 local dataset:
 
 - **Source**: Screenshots taken from Stardew Valley gameplay (Pierre's shop, iPad + PC)
 - **Size**: 22 annotated Pierre's shop screenshots (Phase 1)
@@ -45,9 +62,13 @@ See [`docs/adr/009-agent-tool-calling-architecture.md`](docs/adr/009-agent-tool-
 ## Project Structure
 
 ```
-src/stardew_vision/
+services/
+  coordinator/  # Fine-tuned classification, OCR dispatch, narration, TTS
+  ocr-tools/    # Unified Pierre's shop, TV dialog, caught-fish extraction
+  tts-tool/     # Kokoro synthesis
+src/stardew_vision/  # Historical local implementation
   tools/        # Extraction agents: crop_pierres_detail_panel, etc.
-  tts/          # MeloTTS wrapper (text_to_speech tool)
+  tts/          # Historical local TTS wrapper
   serving/      # FastAPI agent loop (inference.py)
   webapp/       # FastAPI app, routes, static HTML
 datasets/       # Host volume — screenshots, annotations, templates
@@ -62,18 +83,10 @@ configs/        # Training configs, output schemas
 
 ### OpenShift AI Deployment
 
-Complete guides for deploying to OpenShift AI:
-
-- **[Deployment Summary](docs/DEPLOYMENT_SUMMARY.md)** — Issues fixed, final configuration, production status
-- **[KServe Deployment Guide](docs/DEPLOYING_MODELS_KSERVE.md)** — Detailed step-by-step deployment
-- **[Quick Start Guide](docs/DEPLOYING_MODELS_QUICKSTART.md)** — Fast-track for experienced users
-
-**Architecture:**
-- vLLM serving Qwen2.5-VL-7B-Instruct (GPU-accelerated, tool calling enabled)
-- Coordinator agent runtime (3 replicas)
-- OCR tool (PaddleOCR + OpenCV, 2 replicas)
-- TTS tool (Kokoro, 2 replicas)
-- All services internal-only except webapp (OpenShift Route with TLS)
+Use the [canonical deployment guide](configs/serving/openshift/README.md) and
+`./deploy/deploy-to-openshift.sh`. The verified architecture and pinned adapter
+are described above. The original `stardew-vision` Route serves the fine-tuned
+coordinator; OCR, TTS, and the predictor remain internal-only.
 
 ### Local Development Setup
 
@@ -103,22 +116,11 @@ pytest tests/
 pytest tests/test_tools.py -v
 ```
 
-### Start vLLM server (Qwen orchestrator)
+### Run the current application
 
-```bash
-vllm serve models/fine-tuned/qwen25vl-stardew-v1 \
-  --dtype float16 \
-  --port 8001 \
-  --served-model-name stardew-vision-vlm
-```
-
-### Start web app
-
-```bash
-uvicorn src.stardew_vision.webapp.app:app --port 8000
-```
-
-Then open `http://localhost:8000` and upload a Pierre's shop screenshot.
+For the complete fine-tuned application, follow
+[QUICKSTART.md](QUICKSTART.md). Historical local ROCm experiments are documented
+in [vLLM notes](docs/vllm-notes.md); they are not the production deployment.
 
 ## Status
 
@@ -128,22 +130,26 @@ Then open `http://localhost:8000` and upload a Pierre's shop screenshot.
 | Agent loop (FastAPI + Qwen) | ✅ Complete — deployed to production |
 | TTS tool (Kokoro) | ✅ Complete — deployed to production |
 | Web app | ✅ Complete — deployed to production |
-| Fine-tuning (LoRA) | Planned for Phase 2 |
+| Fine-tuning (LoRA) | Deployed — pinned private Hugging Face adapter |
 | **Production Deployment** | ✅ **Live on OpenShift AI** |
 
-**Deployment URL:** `https://stardew-vision-stardew-vision.apps.stardew-vision.sandbox5291.opentlc.com`
+**Deployment URL:** Obtain the current host from the original Route:
 
-See [`docs/DEPLOYMENT_SUMMARY.md`](docs/DEPLOYMENT_SUMMARY.md) for complete deployment details.
+```bash
+oc get route stardew-vision -n stardew-vision -o jsonpath='{.spec.host}'
+```
+
+See the [canonical deployment guide](configs/serving/openshift/README.md) for complete deployment details.
 
 ## Key Technical Decisions
 
 | Decision | Choice |
 |----------|--------|
-| VLM orchestrator | Qwen2.5-VL-7B-Instruct (FP16) |
+| VLM orchestrator | Fine-tuned Qwen2.5-VL-7B-Instruct + pinned LoRA adapter |
 | Agent loop | Raw OpenAI client — no framework |
 | OCR | PaddleOCR PP-OCRv5, CPU-only |
 | TTS | Kokoro (CPU, MIT license) |
-| Serving | vLLM (local dev) + KServe on OpenShift AI (production) |
+| Serving | vLLM 0.13 + KServe on OpenShift AI (production) |
 | Precision | FP16 only — ROCm 7.2 constraint (local dev) |
 
 Full rationale in [`docs/adr/`](docs/adr/).

@@ -4,6 +4,7 @@ metadata:
   name: paddlex-cache-ocr-tools
   namespace: stardew-vision
 spec:
+  storageClassName: gp3-csi
   accessModes:
     - ReadWriteOnce
   resources:

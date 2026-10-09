@@ -8,7 +8,7 @@
 
 - ✅ **Quality stars:** All 6 sprites extracted from `Cursors.xnb` (silver, gold, iridium at 100%/125% UI scales)
 - ✅ **Font assets:** SmallFont.png + SmallFont.json extracted from `SmallFont.xnb`
-- 📄 **See:** [datasets/assets/EXTRACTION_SUMMARY.md](../datasets/assets/EXTRACTION_SUMMARY.md) for complete details
+- 📄 **See:** [the preserved extraction changelog](ASSET_EXTRACTION_CHANGELOG.md#summary) for complete details
 
 **You do NOT need to manually collect these assets via screenshots.**
 

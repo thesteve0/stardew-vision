@@ -4,6 +4,13 @@
 **Status**: Accepted
 **Deciders**: Project team
 
+> **Deployment details superseded**: This ADR preserves the historical decision
+> and rationale, not current operations. The verified deployment uses fine-tuned
+> Qwen2.5-VL-7B with vLLM 0.13, baked-in tool schemas, unified OCR on 8004, Kokoro
+> on 8003, and `coordinator-finetuned` on 8000 (one replica each). The original
+> `stardew-vision` Route targets that coordinator. See the
+> [canonical deployment guide](../../configs/serving/openshift/README.md) for pinned artifacts and safe commands.
+
 ## Context
 
 The fine-tuned VLM must be served to the web application. Two environments need to be addressed:
@@ -37,26 +44,15 @@ Additionally, the decision of **distributed training** framework (KubeFlow Pipel
 
 ## Implementation Details
 
-### Local vLLM Serving
+### Serving Instructions (superseded)
 
-```bash
-vllm serve models/fine-tuned/qwen25vl-stardew-v1 \
-  --dtype float16 \
-  --max-model-len 4096 \
-  --gpu-memory-utilization 0.85 \
-  --served-model-name stardew-vision-vlm \
-  --port 8001
-```
+The original local command and merged-model S3/ODF deployment recipe are
+superseded. The current deployment loads the pinned private Hugging Face LoRA
+adapter from its dedicated PVC; it does not require merged weights or S3.
+Follow the [canonical deployment guide](../../configs/serving/openshift/README.md).
 
-Configuration file: `configs/serving/vllm_local.yaml`
-
-### OpenShift AI KServe
-
-The fine-tuned LoRA adapter is merged into base model weights (`peft.merge_and_unload()`) before pushing to S3/ODF storage. The InferenceService pulls the merged model at startup.
-
-Files:
-- `configs/serving/openshift/serving_runtime.yaml` — defines vLLM container image and resource requests
-- `configs/serving/openshift/inference_service.yaml` — points to model artifact, sets replica count
+The client pattern below is historical: current classification bakes tool
+schemas into its system prompt and does not pass `tools=` or `tool_choice=`.
 
 ### Web App Client Pattern
 
