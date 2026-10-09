@@ -1,3 +1,4 @@
+# Downloaded, hash-verified Hugging Face adapter; no historical EFS dependency.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -8,10 +9,8 @@ metadata:
     component: lora-adapter
 spec:
   accessModes:
-    - ReadWriteMany
-  # Static binding to the pre-created PV
-  storageClassName: ""
-  volumeName: lora-adapter-pv
+    - ReadWriteOnce
+  storageClassName: gp3-csi
   resources:
     requests:
       storage: 20Gi

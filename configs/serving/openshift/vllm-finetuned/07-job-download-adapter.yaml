@@ -1,0 +1,84 @@
+# Downloads only the two adapter files at the pinned private HF revision.
+# Requires an existing huggingface-adapter Secret with key token; no Secret here.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: download-lora-adapter
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: lora-adapter
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: download
+          image: python:3.12-slim@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              pip install --no-cache-dir --target=/tmp/hf-packages huggingface_hub==0.36.0
+              PYTHONPATH=/tmp/hf-packages python - <<'PY'
+              import hashlib
+              import os
+              from pathlib import Path
+              from huggingface_hub import snapshot_download
+
+              destination = Path('/mnt/lora-adapter/model-output')
+              expected = {
+                  'adapter_model.safetensors': '373c475669049191527b3d8e8a330f347f236855482bb2282f9604177a915a63',
+                  'adapter_config.json': '449c057c21c46e3bc0d32d4d7a3590112927c756ae4a7e0ec6326cdc91e2e478',
+              }
+              snapshot_download(
+                  repo_id='TheSteve0/stardew-vision-qwen-tool-select-v1',
+                  revision='73cb70b1718e2a09af55d823701fcd26b3c6a333',
+                  token=os.environ['HF_TOKEN'],
+                  allow_patterns=list(expected),
+                  local_dir=str(destination),
+              )
+              for name, wanted in expected.items():
+                  digest = hashlib.sha256()
+                  with (destination / name).open('rb') as stream:
+                      for block in iter(lambda: stream.read(1024 * 1024), b''):
+                          digest.update(block)
+                  if digest.hexdigest() != wanted:
+                      raise RuntimeError(f'SHA256 mismatch: {name}; refusing completion')
+                  print(f'Verified {name}: {wanted}')
+              print('Adapter download complete; both pinned SHA256 hashes verified.')
+              PY
+          env:
+            - name: HOME
+              value: /tmp
+            - name: HF_HOME
+              value: /tmp/hf_home
+            - name: HF_HUB_DISABLE_TELEMETRY
+              value: "1"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: huggingface-adapter
+                  key: token
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: lora-adapter
+              mountPath: /mnt/lora-adapter
+      volumes:
+        - name: lora-adapter
+          persistentVolumeClaim:
+            claimName: lora-adapter

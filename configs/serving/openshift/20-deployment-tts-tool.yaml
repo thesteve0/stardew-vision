@@ -8,6 +8,11 @@ metadata:
     component: tts-tool
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       component: tts-tool
@@ -19,11 +24,11 @@ spec:
     spec:
       initContainers:
         - name: download-kokoro
-          image: ghcr.io/thesteve0/stardew-tts-tool:v0.4.0
+          image: ghcr.io/thesteve0/stardew-tts-tool:v0.4.0@sha256:2fad9aa8a9855b16dd078f3f1974fe9eaebc6964692d3edc52ab52c038706976
           command: ["/bin/sh", "-c"]
           args:
             - |
-              python -c "from kokoro import generate; generate('test', voice='af_bella', speed=1.0)" || true
+              uv run --frozen python -c "from stardew_tts.synthesize import synthesize; synthesize('test')"
           env:
             - name: HF_HOME
               value: /cache
@@ -32,7 +37,14 @@ spec:
               mountPath: /cache
       containers:
         - name: tts
-          image: ghcr.io/thesteve0/stardew-tts-tool:v0.4.0
+          image: ghcr.io/thesteve0/stardew-tts-tool:v0.4.0@sha256:2fad9aa8a9855b16dd078f3f1974fe9eaebc6964692d3edc52ab52c038706976
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
           ports:
             - containerPort: 8003
               protocol: TCP

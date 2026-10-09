@@ -1,19 +1,12 @@
-# Download a pinned Qwen2.5-VL-7B-Instruct revision for the base predictor.
-# GPU scheduling binds the RWO cache in a GPU node availability zone.
-# Fine-tuned serving on another node requires its own cache or RWX storage.
-#
-# Usage: oc apply -f 06-job-download-model.yaml
-# Monitor: oc logs -f job/download-qwen-model -n stardew-vision
-# Cleanup: oc delete job download-qwen-model -n stardew-vision
----
+# Pinned base model, separate cache; GPU selector binds in a GPU availability zone.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: download-qwen-model
+  name: download-qwen-model-finetuned
   namespace: stardew-vision
   labels:
     app: stardew-vision
-    component: vllm
+    component: vllm-finetuned
 spec:
   backoffLimit: 2
   ttlSecondsAfterFinished: 86400
@@ -58,7 +51,13 @@ spec:
           volumeMounts:
             - name: model-cache
               mountPath: /mnt/models
+            # Bind both claims on the same GPU node/zone before either is served.
+            - name: adapter-cache
+              mountPath: /mnt/lora-adapter
       volumes:
         - name: model-cache
           persistentVolumeClaim:
-            claimName: vllm-model-cache
+            claimName: vllm-model-cache-finetuned
+        - name: adapter-cache
+          persistentVolumeClaim:
+            claimName: lora-adapter

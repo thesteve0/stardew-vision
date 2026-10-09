@@ -8,6 +8,11 @@ metadata:
     component: ocr-tools
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       component: ocr-tools
@@ -20,12 +25,14 @@ spec:
       # Init container: pre-download PaddleOCR models so first request is fast
       initContainers:
         - name: download-models
-          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.4
+          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.5@sha256:feed35b85ab287bfedd2c5fbb478a191af794db418de274482a88ef207f31839
           command: ["/bin/sh", "-c"]
           args:
             - |
-              uv run python -c "from stardew_ocr_tools.common import load_ocr; load_ocr()" || true
+              uv run --frozen python -c "from stardew_ocr_tools.app import load_ocr; load_ocr()"
           env:
+            - name: PADDLE_PDX_CACHE_HOME
+              value: /cache/paddlex
             - name: PADDLEX_HOME
               value: /cache/paddlex
             - name: PADDLEX_CACHE_DIR
@@ -43,11 +50,20 @@ spec:
               mountPath: /cache
       containers:
         - name: ocr-tools
-          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.4
+          image: ghcr.io/thesteve0/stardew-ocr-tools:v0.3.5@sha256:feed35b85ab287bfedd2c5fbb478a191af794db418de274482a88ef207f31839
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
           ports:
             - containerPort: 8004
               protocol: TCP
           env:
+            - name: PADDLE_PDX_CACHE_HOME
+              value: /cache/paddlex
             - name: PADDLEX_HOME
               value: /cache/paddlex
             - name: PADDLEX_CACHE_DIR

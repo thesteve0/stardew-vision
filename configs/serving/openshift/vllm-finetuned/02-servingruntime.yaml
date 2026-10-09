@@ -28,7 +28,7 @@ spec:
     args:
     - --port=8080
     - --model=/mnt/models
-    - --served-model-name={{.Name}}
+    - --served-model-name=qwen-base
     # --- LoRA adapter configuration ---
     - --enable-lora
     - --lora-modules={{.Name}}=/mnt/lora-adapter/model-output
@@ -43,8 +43,7 @@ spec:
     - name: chat-template
       mountPath: /mnt/chat-template
       readOnly: true
-    # LoRA adapter files from the training PVC (cross-namespace via static PV)
-    # Mount the full EFS volume; vLLM references the adapter at the full path
+    # Hash-verified Hugging Face adapter downloaded to this dedicated RWO PVC.
     - name: lora-adapter
       mountPath: /mnt/lora-adapter
       readOnly: true

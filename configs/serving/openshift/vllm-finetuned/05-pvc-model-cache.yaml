@@ -1,0 +1,16 @@
+# Dedicated 50Gi gp3 RWO base-model cache for the fine-tuned predictor.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-model-cache-finetuned
+  namespace: stardew-vision
+  labels:
+    app: stardew-vision
+    component: vllm-finetuned
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: gp3-csi

@@ -25,7 +25,7 @@ spec:
       modelFormat:
         name: vLLM
       runtime: stardew-vlm-finetuned
-      storageUri: pvc://vllm-model-cache
+      storageUri: pvc://vllm-model-cache-finetuned
       args:
         - --max-model-len=8192
         - --limit-mm-per-prompt={"image":1}

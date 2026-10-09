@@ -1,0 +1,12 @@
+# Separate RWO storage avoids cross-node attachment conflicts with the base coordinator.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: error-screenshots-finetuned
+  namespace: stardew-vision
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

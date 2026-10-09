@@ -36,6 +36,10 @@ _MATCH_SCALES = [1.0, 1.25, 1.5]
 # Confidence threshold for template matching
 _MATCH_THRESHOLD = 0.65
 
+# Ignore weak recognitions of panel decoration/background, not numeric content.
+# Keep the original records in debug output so rejected text remains inspectable.
+_MIN_TEXT_CONFIDENCE = 0.5
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -148,8 +152,11 @@ def run_ocr_panel(cropped: np.ndarray) -> list[dict]:
 
 
 def parse_pierre_fields(ocr_results: list[dict]) -> dict:
-    """Extract Pierre's shop fields from OCR results."""
-    sorted_results = sorted(ocr_results, key=lambda r: r["rel_y"])
+    """Extract fields from confident OCR records; leave raw input unchanged."""
+    sorted_results = sorted(
+        (rec for rec in ocr_results if rec["score"] >= _MIN_TEXT_CONFIDENCE),
+        key=lambda rec: rec["rel_y"],
+    )
 
     qty_total_pattern = re.compile(r"[x\u00d7](\d+):\s*(\d[\d,]*)")
     price_pattern = re.compile(r"^([\d,]+)\s*(?:[Gg]|\d)?\s*$")

@@ -8,6 +8,11 @@ metadata:
     component: coordinator-finetuned
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       component: coordinator-finetuned
@@ -19,7 +24,7 @@ spec:
     spec:
       containers:
         - name: coordinator
-          image: ghcr.io/thesteve0/stardew-coordinator:v0.8.2
+          image: ghcr.io/thesteve0/stardew-coordinator:v0.8.2@sha256:dc178497d02248b4dab12046caf69c041d03b97704bbc35b8cd65e569cec75af
           # Use the switchable entrypoint that reads AGENT_MODE
           command: ["uv", "run", "python", "-m", "uvicorn",
                     "stardew_coordinator.app_finetuned:app",
@@ -55,7 +60,7 @@ spec:
       volumes:
         - name: errors
           persistentVolumeClaim:
-            claimName: error-screenshots
+            claimName: error-screenshots-finetuned
 ---
 apiVersion: v1
 kind: Service
