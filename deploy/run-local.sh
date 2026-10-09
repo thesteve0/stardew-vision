@@ -12,7 +12,7 @@ PIDS=()
 trap 'kill "${PIDS[@]}" 2>/dev/null || true' EXIT
 for entry in 'ocr-tools:stardew_ocr_tools.app:8004' 'tts-tool:stardew_tts.app:8003' 'coordinator:stardew_coordinator.app_finetuned:8000'; do
   directory=${entry%%:*}; rest=${entry#*:}; module=${rest%%:*}; port=${rest##*:}
-  (cd "$ROOT/services/$directory" && exec uv run python -m uvicorn "$module:app" --port "$port") &
+  (cd "$ROOT/services/$directory" && exec uv run --locked --no-dev python -m uvicorn "$module:app" --port "$port") &
   PIDS+=("$!")
 done
 echo 'Local fine-tuned coordinator: http://localhost:8000 (vLLM must already serve stardew-vlm-finetuned)'
